@@ -1,4 +1,4 @@
-package com.plankslam.app;
+package com.kazuma.firstgame;
 
 import com.getcapacitor.BridgeActivity;
 
