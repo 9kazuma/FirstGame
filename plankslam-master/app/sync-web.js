@@ -38,4 +38,8 @@ if (fs.existsSync(wwwIndex)) {
 }
 
 console.log(changed ? `sync:web done - ${changed} file(s) updated` : "sync:web done - already in sync");
-console.log("remember: run `npx cap sync android` before building, or the APK keeps the old code");
+/* `npm run sync` chains cap sync straight after, so only nag when run alone */
+if (!process.argv.includes("--with-cap")) {
+  console.log("NOTE: this copied into app/www only. Run `npx cap sync android` too,");
+  console.log("      or use `npm run sync` next time, or the APK keeps the old code.");
+}

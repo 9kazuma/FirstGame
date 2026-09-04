@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "sync:web": "node sync-web.js",
-    "sync": "node sync-web.js && npx cap sync android",
+    "sync": "node sync-web.js --with-cap && npx cap sync android",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
