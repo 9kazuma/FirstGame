@@ -6,8 +6,8 @@
      app/android/.../assets/public/    <- written by `cap sync`, runs in the APK
 
    Run `npm run sync:web` (copy only) or `npm run sync` (copy + cap sync).
-   index.html is deliberately NOT copied: the www one carries the ad script
-   tags, so the two differ on purpose. */
+   index.html IS copied, but the ad script tags the native build needs are
+   re-inserted on the way through - edit only the root index.html. */
 const fs = require("fs");
 const path = require("path");
 
@@ -28,12 +28,26 @@ for (const name of FILES) {
   changed++;
 }
 
-/* guard: index.html must keep its ad tags in the www build */
+/* index.html: copy the root one but re-insert the native-only ad scripts,
+   so you never have to edit two copies by hand. */
+const AD_TAGS = ["capacitor.js", "admob.js", "ads.js"];
+const ANCHOR = '<script src="https://cdnjs.cloudflare.com';
+const srcIndex = path.join(ROOT, "index.html");
 const wwwIndex = path.join(WWW, "index.html");
-if (fs.existsSync(wwwIndex)) {
-  const html = fs.readFileSync(wwwIndex, "utf8");
-  for (const tag of ["capacitor.js", "admob.js", "ads.js"]) {
-    if (!html.includes(tag)) console.warn(`  WARNING: app/www/index.html is missing <script src="${tag}"> - ads will not load`);
+if (fs.existsSync(srcIndex)) {
+  let html = fs.readFileSync(srcIndex, "utf8");
+  const at = html.indexOf(ANCHOR);
+  if (at === -1) {
+    console.warn("  WARNING: index.html not copied - could not find the three.js <script> to insert the ad tags before.");
+  } else {
+    const inject = AD_TAGS.map(t => `<script src="${t}"></script>`).join("\n") + "\n";
+    html = html.slice(0, at) + inject + html.slice(at);
+    for (const t of AD_TAGS) {
+      if (!html.includes(`src="${t}"`)) { console.warn(`  WARNING: ${t} tag missing after injection`); }
+    }
+    const prev = fs.existsSync(wwwIndex) ? fs.readFileSync(wwwIndex, "utf8") : null;
+    if (prev === html) { console.log("  same   index.html"); }
+    else { fs.writeFileSync(wwwIndex, html); console.log("  copied index.html  (+ad tags re-inserted)"); changed++; }
   }
 }
 
