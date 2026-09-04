@@ -20,6 +20,9 @@ var ABSORB_WHITE = 1.2;   // banked damage bonus if next attack hits white
 var SPECIAL_HITS = 4;     // spins in one special attack
 var SPECIAL_ALL_WHITE = 2;// damage multiplier if every special spin is white
 var SPECIAL_OFFER_HOLD = 1.2; // seconds the dial freezes so you can choose to unleash
+
+/* playtest feedback form - opens in the system browser, not inside the app */
+var SURVEY_URL = "https://docs.google.com/forms/d/e/1FAIpQLScMGkqqrF7oqVVruWB25vRLTs7ykEnM49UXl5tEXBsqDw2V4Q/viewform";
 var BURN_PCT = 0.05;      // burning: % of max HP the foe loses whenever he swings
 var CHILL_SPINS = 2;      // how many spins a chill proc slows
 var CHILL_SPEED = 0.62;   // speed multiplier while chilled
@@ -1187,6 +1190,19 @@ $("ad-btn").addEventListener("click", function () {
     window.Ads.showRewarded().then(done).catch(function () { done(false); });
   } else {
     setTimeout(function () { done(true); }, 700);   // web build: no ad SDK, grant for testing
+  }
+});
+
+$("survey-btn").addEventListener("click", function () {
+  SFX.buy();
+  /* Capacitor sends off-origin links to the system browser, so the player
+     keeps the game running behind the form instead of being trapped in the
+     WebView with no back button. */
+  try {
+    var w = window.open(SURVEY_URL, "_blank", "noopener");
+    if (!w) location.href = SURVEY_URL;          /* popup blocked - go directly */
+  } catch (e) {
+    location.href = SURVEY_URL;
   }
 });
 
