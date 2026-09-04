@@ -122,6 +122,8 @@ canvas{display:block;width:100%;height:100%}
   border-radius:2px;padding:12px 4px;color:var(--bone);text-align:center;transition:.12s}
 .diff .dn{font-family:var(--display);font-size:9px;letter-spacing:.08em;display:block}
 .diff .dm{font-family:var(--display);font-size:14px;color:var(--torch);opacity:.5;display:block;margin-top:7px}
+.diff .df{font-family:var(--display);font-size:7.5px;letter-spacing:.1em;opacity:.5;display:block;margin-top:5px}
+.diff .df.short{color:var(--redstone);opacity:.9}
 .diff[aria-pressed="true"]{background:rgba(255,194,68,.14);box-shadow:inset 0 0 0 2px var(--torch)}
 .diff[aria-pressed="true"] .dm{opacity:1}
 .diff:focus-visible{outline:2px solid var(--bone);outline-offset:3px}

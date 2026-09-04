@@ -30,13 +30,18 @@ var CHARGE = { white: 15, yellow: 10, counter: 15, block: 10, taken: 5 };
 var C = { pitch: 0x17131f, plank: 0xb4813f, plankDark: 0x6b4a22, lapis: 0x4668e8,
           redstone: 0xe0453a, torch: 0xffc244, bone: 0xf2ede1 };
 
-/* Stakes: coin payout only. Difficulty comes from curveFor(level) below,
-   so these no longer carry speed/zone/hp - change CURVE_* for difficulty. */
+/* Stakes: coin payout and entry fee only. Difficulty comes from
+   curveFor(level) below, so these carry no speed/zone/hp - change the
+   CURVE_* constants for difficulty.
+   fee is charged PER OPPONENT LEVEL, so the gamble keeps its bite deep
+   into a run. Keep fee below reward*6 or the stake stops being worth
+   taking as levels climb (the win payout grows by reward*6 per level). */
 var DIFFS = [
-  { key: "COPPER", reward: 1.0 },
-  { key: "SILVER", reward: 1.9 },
-  { key: "GOLD",   reward: 3.4 }
+  { key: "COPPER", reward: 1.0, fee: 0 },
+  { key: "SILVER", reward: 1.9, fee: 9 },
+  { key: "GOLD",   reward: 3.4, fee: 16 }
 ];
+function entryFee(lvl) { return Math.round(DIFFS[RUN.diff].fee * lvl); }
 
 /* Shop is deliberately tiny now - coins are for chests. */
 var UPGRADES = [
@@ -932,7 +937,8 @@ var diffsEl = $("diffs");
 DIFFS.forEach(function (d, i) {
   var b = document.createElement("button");
   b.className = "diff"; b.type = "button";
-  b.innerHTML = '<span class="dn">' + d.key + '</span><span class="dm">x' + d.reward.toFixed(1) + "</span>";
+  b.innerHTML = '<span class="dn">' + d.key + '</span><span class="dm">x' + d.reward.toFixed(1) +
+                '</span><span class="df" data-fee></span>';
   b.addEventListener("click", function () { RUN.diff = i; SFX.buy(); save(); renderPit(); });
   diffsEl.appendChild(b);
 });
@@ -984,8 +990,14 @@ function renderPit() {
   $("streak-line").textContent = RUN.streak
     ? "WIN STREAK " + RUN.streak + "  -  BEST " + RUN.best
     : (RUN.best ? "BEST STREAK " + RUN.best : "NO WINS YET");
+  var nextLvl = foeLevel();
   Array.prototype.forEach.call(diffsEl.children, function (b, i) {
     b.setAttribute("aria-pressed", i === RUN.diff ? "true" : "false");
+    var f = Math.round(DIFFS[i].fee * nextLvl), slot = b.querySelector("[data-fee]");
+    if (slot) {
+      slot.textContent = f ? "BUY IN " + f : "FREE";
+      slot.className = "df" + (f > RUN.coins ? " short" : "");
+    }
   });
   Array.prototype.forEach.call(shopEl.children, function (row) {
     var u = row._u, lv = RUN.up[u.k];
@@ -1017,7 +1029,11 @@ function renderPit() {
   var lvl = foeLevel(), d = foeFor(lvl), boss = isBoss(lvl);
   $("next-foe").className = "next-foe" + (boss ? " boss" : "");
   $("nf-name").textContent = (boss ? "BOSS: " : "") + d.n;
-  $("nf-stat").textContent = "LV " + lvl + " - " + foeMaxHP(lvl) + " HP - YOU " + youMaxHP() + " HEARTS" + (boss ? " - +1 GEM" : "");
+  var fee = entryFee(lvl), broke = RUN.coins < fee;
+  $("nf-stat").textContent = "LV " + lvl + " - " + foeMaxHP(lvl) + " HP - YOU " + youMaxHP() + " HEARTS" +
+    (boss ? " - +1 GEM" : "") + (fee ? " - BUY IN " + fee : "");
+  $("fight-btn").disabled = broke;
+  $("fight-btn").textContent = broke ? "NEED " + fee : "Fight";
 }
 
 /* ---------- wardrobe ---------- */
@@ -1084,7 +1100,12 @@ addEventListener("pointerdown", function (e) {
 spBtn.addEventListener("click", function (e) { e.stopPropagation(); wake(); useSpecial(); });
 
 $("start-btn").addEventListener("click", function () { wake(); $("menu").hidden = true; renderPit(); $("pit").hidden = false; if (window.Ads) window.Ads.showBanner(); });
-$("fight-btn").addEventListener("click", function () { $("pit").hidden = true; if (window.Ads) window.Ads.hideBanner(); beginBattle(); });
+$("fight-btn").addEventListener("click", function () {
+  var fee = entryFee(foeLevel());
+  if (RUN.coins < fee) { SFX.nope(); return; }      /* cannot buy in at these stakes */
+  RUN.coins -= fee; save();
+  $("pit").hidden = true; if (window.Ads) window.Ads.hideBanner(); beginBattle();
+});
 $("again-btn").addEventListener("click", function () { $("over").hidden = true; renderPit(); $("pit").hidden = false; if (window.Ads) window.Ads.showBanner(); });
 $("ward-btn").addEventListener("click", function () { $("pit").hidden = true; renderWardrobe(); $("wardrobe").hidden = false; });
 $("ward-back").addEventListener("click", function () { $("wardrobe").hidden = true; renderPit(); $("pit").hidden = false; });
