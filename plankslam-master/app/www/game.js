@@ -19,6 +19,7 @@ var ABSORB_STORE = 14;    // damage banked when ABSORB procs
 var ABSORB_WHITE = 1.2;   // banked damage bonus if next attack hits white
 var SPECIAL_HITS = 4;     // spins in one special attack
 var SPECIAL_ALL_WHITE = 2;// damage multiplier if every special spin is white
+var SPECIAL_OFFER_HOLD = 1.2; // seconds the dial freezes so you can choose to unleash
 var BURN_PCT = 0.05;      // burning: % of max HP the foe loses whenever he swings
 var CHILL_SPINS = 2;      // how many spins a chill proc slows
 var CHILL_SPEED = 0.62;   // speed multiplier while chilled
@@ -360,7 +361,41 @@ function burst(x, y, z, color) {
     m.userData.life = .75; scene.add(m); debris.push(m);
   }
 }
+/* big radial shower for the special attack - a ring blown outward plus an
+   upward spray, in the torch/bone/redstone palette, with a light flash */
+var specialLight = new THREE.PointLight(0xffc244, 0, 14, 2);
+specialLight.position.set(0.4, 2.1, 0);
+scene.add(specialLight);
+
+function specialBurst(x, y, z) {
+  var cols = [C.torch, 0xfff3cf, C.redstone, C.bone];
+  var i, m, s, a, sp;
+  for (i = 0; i < 44; i++) {                       /* ring blown outward */
+    a = (i / 44) * Math.PI * 2 + rnd(-0.12, 0.12);
+    sp = rnd(3.0, 6.6);
+    s = rnd(.06, .17);
+    m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshLambertMaterial({ color: cols[i % cols.length] }));
+    m.position.set(x + rnd(-.15, .15), y + rnd(-.2, .2), z + rnd(-.15, .15));
+    m.userData.v = new THREE.Vector3(Math.cos(a) * sp, rnd(1.4, 4.2), Math.sin(a) * sp * 0.55);
+    m.userData.rv = new THREE.Vector3(rnd(-15, 15), rnd(-15, 15), rnd(-15, 15));
+    m.userData.life = rnd(.85, 1.4);
+    scene.add(m); debris.push(m);
+  }
+  for (i = 0; i < 18; i++) {                       /* fountain straight up */
+    s = rnd(.05, .12);
+    m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshLambertMaterial({ color: cols[i % 2] }));
+    m.position.set(x + rnd(-.3, .3), y, z + rnd(-.3, .3));
+    m.userData.v = new THREE.Vector3(rnd(-1.2, 1.2), rnd(5.5, 8.5), rnd(-1.2, 1.2));
+    m.userData.rv = new THREE.Vector3(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
+    m.userData.life = rnd(1.0, 1.6);
+    scene.add(m); debris.push(m);
+  }
+  specialLight.position.set(x, y, z);
+  specialLight.intensity = 7;                      /* decays in the frame loop */
+}
+
 function stepDebris(dt) {
+  if (specialLight.intensity > 0) specialLight.intensity = Math.max(0, specialLight.intensity - dt * 9);
   for (var i = debris.length - 1; i >= 0; i--) {
     var d = debris[i]; d.userData.life -= dt;
     if (d.userData.life <= 0) { scene.remove(d); d.geometry.dispose(); d.material.dispose(); debris.splice(i, 1); continue; }
@@ -518,7 +553,7 @@ function renderSpecial() {
   spPct.textContent = Math.round(G.special) + "%";
   var full = G.special >= 100;
   spTrack.classList.toggle("full", full);
-  spBtn.classList.toggle("on", full && G.phase === "attack");
+  spBtn.classList.toggle("on", full && (G.phase === "attack" || G.phase === "offer"));
 }
 function addCharge(n) {
   var was = G.special;
@@ -557,6 +592,7 @@ var G = {
   youHP: 3, youMax: 3, foeHP: 60, foeMax: 60,
   marker: 0, zoneCenter: 0, zone: 64, perfect: 22, speed: 190, travel: 0, maxTravel: 0,
   special: 0, spLeft: 0, spDmg: 0, spAll: true,
+  offerT: 0,
   banked: 0, burn: 0, chill: 0,
   hits: 0, perfects: 0, misses: 0, blocks: 0, counters: 0, dealt: 0,
   shake: 0, resolveT: 0, resolveLen: 1.0, after: null
@@ -601,10 +637,26 @@ function newSpin(speedMul, zoneMul) {
 function startAttack() {
   G.round++;
   newSpin(1, 1);
-  G.phase = "attack";
   hubR.textContent = G.round; hubL.textContent = "ROUND";
-  phaseEl.className = "atk"; phaseEl.textContent = "YOUR SLAM";
   setAnim(you, "windup"); setAnim(foe, "idle");
+  /* charged? freeze the dial briefly so the special is a real decision
+     rather than something you fumble for while the marker is running */
+  if (G.special >= 100) {
+    G.phase = "offer"; G.offerT = 0;
+    phaseEl.className = "spc"; phaseEl.textContent = "SPECIAL READY - USE IT?";
+    $("hint").textContent = "TAP THE BAR TO UNLEASH, OR WAIT TO SLAM";
+    renderSpecial();
+    return;
+  }
+  G.phase = "attack";
+  phaseEl.className = "atk"; phaseEl.textContent = "YOUR SLAM";
+  $("hint").textContent = "SPACE / TAP TO SLAM";
+  renderSpecial();
+}
+/* the hold expired (or was declined) - start the normal spin */
+function beginAttackSpin() {
+  G.phase = "attack";
+  phaseEl.className = "atk"; phaseEl.textContent = "YOUR SLAM";
   $("hint").textContent = "SPACE / TAP TO SLAM";
   renderSpecial();
 }
@@ -775,6 +827,10 @@ function resolveSpecialHit(kind) {
   setAnim(you, "slam");
   G.spLeft--;
   if (G.spLeft > 0) {
+    if (kind !== "miss") {                       /* spark per landed spin, brighter on white */
+      burst(.55, 1.8, 0, white ? C.torch : C.plank);
+      shake(white ? .8 : .5);
+    }
     callout(kind === "miss" ? "MISS" : (white ? "WHITE" : "GOLD"), kind === "miss" ? "#8d8397" : (white ? "#ffc244" : "#f2ede1"));
     pause(0.34, startSpecialSpin);
     return;
@@ -787,7 +843,8 @@ function resolveSpecialHit(kind) {
   G.special = 0; renderSpecial();
   setTimeout(function () {
     setAnim(foe, "hurt");
-    burst(.6, 1.78, 0, C.torch); burst(.4, 2.1, 0, C.redstone);
+    specialBurst(.6, 1.9, 0);
+    if (G.spAll) specialBurst(.2, 2.3, 0);          /* flawless gets a second wave */
     shake(2.2); SFX.special();
     dealToFoe(total, "#ffc244", G.spAll ? " x" + SPECIAL_ALL_WHITE : "");
     callout(G.spAll ? "FLAWLESS SPECIAL x" + SPECIAL_ALL_WHITE : "SPECIAL SLAM", "#ffc244");
@@ -801,7 +858,7 @@ function strike() {
   if (G.phase === "special") { resolveSpecialHit(judge()); return; }
 }
 function useSpecial() {
-  if (G.phase !== "attack" || G.special < 100) { SFX.nope(); return; }
+  if ((G.phase !== "attack" && G.phase !== "offer") || G.special < 100) { SFX.nope(); return; }
   G.spLeft = SPECIAL_HITS; G.spDmg = 0; G.spAll = true;
   spBtn.classList.remove("on");
   SFX.charge();
@@ -858,6 +915,11 @@ function tick(dt) {
       else if (G.phase === "defend") resolveDefend("miss");
       else resolveSpecialHit("miss");
     }
+  } else if (G.phase === "offer") {
+    /* dial held still while you decide whether to unleash the special */
+    G.offerT += dt;
+    you.wind = 0.18 + Math.sin(G.offerT * 6) * 0.05;   /* coiled, breathing */
+    if (G.offerT >= SPECIAL_OFFER_HOLD) beginAttackSpin();
   } else if (G.phase === "resolve") {
     G.resolveT += dt;
     if (G.resolveT >= G.resolveLen) { var f = G.after; G.after = null; G.phase = "wait"; if (f) f(); }
