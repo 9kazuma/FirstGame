@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Release signing credentials are read from android/keystore.properties (gitignored)
+// or from PLANKSLAM_* environment variables. Never hardcode passwords here - this
+// file is committed to a public repository.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def storeFileValue = keystoreProperties['storeFile'] ?: System.getenv('PLANKSLAM_STORE_FILE') ?: 'plankslam-release-key.jks'
+def storePasswordValue = keystoreProperties['storePassword'] ?: System.getenv('PLANKSLAM_STORE_PASSWORD')
+def keyAliasValue = keystoreProperties['keyAlias'] ?: System.getenv('PLANKSLAM_KEY_ALIAS') ?: 'plankslam'
+def keyPasswordValue = keystoreProperties['keyPassword'] ?: System.getenv('PLANKSLAM_KEY_PASSWORD')
+def canSignRelease = storePasswordValue != null && keyPasswordValue != null && file(storeFileValue).exists()
+
 android {
     namespace = "com.kazuma.firstgame"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -18,15 +32,23 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file('plankslam-release-key.jks')
-            storePassword 'Pl4nkSlam2026Secure'
-            keyAlias 'plankslam'
-            keyPassword 'Pl4nkSlam2026Secure'
+            if (canSignRelease) {
+                storeFile file(storeFileValue)
+                storePassword storePasswordValue
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (canSignRelease) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.warn("WARNING: no signing credentials found - release build will be UNSIGNED. " +
+                        "Create android/keystore.properties (see keystore.properties.example) " +
+                        "or set the PLANKSLAM_* environment variables.")
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
