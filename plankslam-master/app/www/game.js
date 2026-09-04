@@ -25,7 +25,7 @@ var CHILL_SPEED = 0.62;   // speed multiplier while chilled
 var WHITE_PROC_BONUS = 10;// +10 percentage points to glove proc odds on a white hit
 
 /* special charge gains */
-var CHARGE = { white: 10, yellow: 5, counter: 10, block: 10, taken: 10 };
+var CHARGE = { white: 15, yellow: 10, counter: 15, block: 10, taken: 5 };
 
 var C = { pitch: 0x17131f, plank: 0xb4813f, plankDark: 0x6b4a22, lapis: 0x4668e8,
           redstone: 0xe0453a, torch: 0xffc244, bone: 0xf2ede1 };
@@ -43,13 +43,49 @@ var UPGRADES = [
 ];
 var GRIP_BONUS = 0.06;
 
+/* ------------------------------------------------------------
+   ENDLESS SCALING
+   Difficulty follows the opponent number rather than a fixed tier:
+   it steps every 5 opponents from the ROOKIE feel up to the
+   BONECRUSHER feel at opponent 30, then creeps every 10 levels.
+   Player damage and enemy health both ride POWER so a fight stays
+   roughly the same number of rounds however deep you get - the
+   challenge comes from the shrinking window, not longer fights.
+------------------------------------------------------------ */
+var CURVE_START = { speed: 0.85, zone: 1.16, hp: 0 };
+var CURVE_END   = { speed: 1.22, zone: 0.80, hp: 3 };
+var CURVE_STEPS = 6;        // 6 steps x 5 opponents = full difficulty at level 30
+var CURVE_EVERY = 5;        // one step per this many opponents
+var CREEP_EVERY = 10;       // past level 30, one creep step per this many levels
+var CREEP_SPEED = 0.04, CREEP_ZONE = 0.02, CREEP_HP = 1;
+var ZONE_FLOOR = 0.62;      // never tighten the window past this
+var BASE_FOE_HP = 230;      // health of a level 1 opponent
+var POWER_PER_LVL = 0.05;   // both your damage and his health grow by this each level
+
+function curveFor(lvl) {
+  var t = Math.min(1, Math.floor(lvl / CURVE_EVERY) / CURVE_STEPS);
+  var d = {
+    speed: CURVE_START.speed + (CURVE_END.speed - CURVE_START.speed) * t,
+    zone:  CURVE_START.zone  + (CURVE_END.zone  - CURVE_START.zone)  * t,
+    hp:    Math.round(CURVE_START.hp + (CURVE_END.hp - CURVE_START.hp) * t)
+  };
+  if (lvl > CURVE_EVERY * CURVE_STEPS) {
+    var k = Math.floor((lvl - CURVE_EVERY * CURVE_STEPS) / CREEP_EVERY);
+    d.speed += CREEP_SPEED * k;
+    d.zone   = Math.max(ZONE_FLOOR, d.zone - CREEP_ZONE * k);
+    d.hp    += CREEP_HP * k;
+  }
+  return d;
+}
+var powerFor = function (lvl) { return 1 + (lvl - 1) * POWER_PER_LVL; };
+
 var FOES = [
   { n: "THE GRUNT",   skin: 0x86a35c, shirt: 0x6f8f45, pants: 0x38292c, hair: 0x2c2118 },
   { n: "THE BRUTE",   skin: 0x86a35c, shirt: 0xc8382f, pants: 0x38292c, hair: 0x2c2118 },
   { n: "IRONJAW",     skin: 0x9aa0a6, shirt: 0x54606e, pants: 0x2f3238, hair: 0x33383e },
-  { n: "ASHMAW",      skin: 0x7c5b52, shirt: 0x8e2b22, pants: 0x2b1f1f, hair: 0x1e1614 },
+  { n: "DEVIANA",      skin: 0x7c5b52, shirt: 0x8e2b22, pants: 0x2b1f1f, hair: 0x1e1614 },
   { n: "THE WARDEN",  skin: 0x8e7ab5, shirt: 0x59357f, pants: 0x2c2140, hair: 0x1d1630 },
-  { n: "OLD KNUCKLE", skin: 0xd0b48a, shirt: 0x1f6f63, pants: 0x243231, hair: 0xe8e2d4 }
+  { n: "HUBERT", skin: 0xd0b48a, shirt: 0x1f6f63, pants: 0x243231, hair: 0xe8e2d4 }
 ];
 var ROMAN = ["", "", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 var isBoss = function (lvl) { return lvl % 5 === 0; };
@@ -100,7 +136,7 @@ var GLOVES = [
     eff: function (v) { return v + "% on hit to slow the next spins"; } },
   { t: "hot",   name: "HOT GLOVES",    stat: "burn",  scale: "s20",
     eff: function (v) { return v + "% on hit to set him burning"; } },
-  { t: "plain", name: "NORMAL GLOVES", stat: "power", scale: "mult",
+  { t: "plain", name: "KEVIN GLOVES", stat: "power", scale: "mult",
     eff: function (v) { return "x" + v.toFixed(2) + " attack damage (no white bonus)"; } }
 ];
 
@@ -164,7 +200,7 @@ if (!load()) stockWardrobe();
 var youMaxHP = function () { return Math.min(HP_CAP, HP_BASE + RUN.up.hearts); };
 var foeLevel = function () { return RUN.streak + 1; };
 function foeMaxHP(lvl) {
-  var base = 55 + (lvl - 1) * 22 + DIFFS[RUN.diff].hp * 14;
+  var base = (BASE_FOE_HP + curveFor(lvl).hp * 14) * powerFor(lvl);
   return Math.round(base * (isBoss(lvl) ? 1.6 : 1));
 }
 function equipped(kind) {
@@ -544,11 +580,11 @@ function spinSpeed(base) {
   return s;
 }
 function newSpin(speedMul, zoneMul) {
-  var D = DIFFS[RUN.diff], lvlF = 1 + (G.lvl - 1) * 0.055;
-  var raw = Math.min(900, (270 + (G.round - 1) * 34) * D.speed * lvlF * (speedMul || 1));
+  var C = curveFor(G.lvl), lvlF = 1 + (G.lvl - 1) * 0.055;
+  var raw = Math.min(900, (270 + (G.round - 1) * 34) * C.speed * lvlF * (speedMul || 1));
   G.speed = spinSpeed(raw);
   var zBase = Math.max(15, 64 - (G.round - 1) * 4.5);
-  G.zone = clamp(zBase * D.zone * (1 + RUN.up.grip * GRIP_BONUS) * (zoneMul || 1), 12, 95);
+  G.zone = clamp(zBase * C.zone * (1 + RUN.up.grip * GRIP_BONUS) * (zoneMul || 1), 12, 95);
   G.perfect = Math.max(5, G.zone * 0.32);
   G.zoneCenter = rnd(0, 360);
   G.marker = (G.zoneCenter + 180 + rnd(-45, 45) + 360) % 360;
@@ -601,7 +637,7 @@ function gloveProc(isWhite) {
   return Math.random() < chance ? g.stat : null;
 }
 function attackDamage(isWhite) {
-  var d = isWhite ? DMG.white : DMG.yellow;
+  var d = (isWhite ? DMG.white : DMG.yellow) * powerFor(G.lvl);
   var g = equipped("gloves");
   if (g && g.stat === "power") d *= g.val;
   if (G.banked > 0) { d += G.banked * (isWhite ? ABSORB_WHITE : 1); G.banked = 0; }
@@ -671,7 +707,7 @@ function resolveDefend(kind) {
     addCharge(CHARGE.counter);
     setTimeout(function () {
       setAnim(foe, "hurt"); burst(.6, 1.78, 0, C.torch); shake(1.4); SFX.counter();
-      dealToFoe(DMG.counter, "#ffc244", "");
+      dealToFoe(Math.round(DMG.counter * powerFor(G.lvl)), "#ffc244", "");
       callout("COUNTER", "#ffc244");
     }, 150);
     pause(1.05, afterDefend);
@@ -696,7 +732,7 @@ function resolveDefend(kind) {
     if (saved === "counter") {
       G.counters++; addCharge(CHARGE.counter);
       setAnim(foe, "hurt"); burst(.6, 1.78, 0, C.torch); shake(1.3); SFX.counter();
-      dealToFoe(DMG.counter, "#ffc244", "");
+      dealToFoe(Math.round(DMG.counter * powerFor(G.lvl)), "#ffc244", "");
       callout("OUTFIT COUNTER", "#ffc244");
     } else if (saved === "evade") {
       setAnim(you, "evade"); SFX.evade();
@@ -737,7 +773,7 @@ function resolveSpecialHit(kind) {
     return;
   }
   /* final blow */
-  var total = Math.round(G.spDmg * (G.spAll ? SPECIAL_ALL_WHITE : 1));
+  var total = Math.round(G.spDmg * (G.spAll ? SPECIAL_ALL_WHITE : 1) * powerFor(G.lvl));
   var g = equipped("gloves");
   if (g && g.stat === "power") total = Math.round(total * g.val);
   if (G.banked > 0) { total += Math.round(G.banked * (G.spAll ? ABSORB_WHITE : 1)); G.banked = 0; }
