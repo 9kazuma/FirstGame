@@ -50,9 +50,18 @@ function entryFee(lvl) { return Math.round(DIFFS[RUN.diff].fee * lvl); }
 /* Shop is deliberately tiny now - coins are for chests. */
 var UPGRADES = [
   { k: "hearts", name: "HEART SLOTS", desc: "One more heart to lose", max: 2, costs: [1500, 2000] },
-  { k: "grip",   name: "GRIP",        desc: "Widens the gold arc a little", max: 1, costs: [3000] }
+  { k: "grip",   name: "GRIP",        desc: "Widens the gold arc a little", max: 1, costs: [3000] },
+  { k: "power",  name: "TRAINING",    desc: "+1 base damage on every hit", max: 2, costs: [800, 1800] }
 ];
 var GRIP_BONUS = 0.06;
+/* Training adds flat base damage before the level scaling, so it keeps
+   its value deep into a run instead of fading. */
+var powerBonus = function () { return RUN.up.power; };
+
+/* The dial gets faster and the arc tighter each round of a fight. Past this
+   round it stops escalating - by round 11 it is already brutal and further
+   ramping just made long fights unwinnable rather than harder. */
+var ROUND_RAMP_CAP = 11;
 
 /* ------------------------------------------------------------
    ENDLESS SCALING
@@ -181,7 +190,7 @@ function itemEff(it) { return defOf(it.kind, it.type).eff(it.val); }
 var SAVE_KEY = "plankslam.run.v2";
 var RUN = {
   coins: 0, gems: 0, streak: 0, best: 0, diff: 1,
-  up: { hearts: 0, grip: 0 },
+  up: { hearts: 0, grip: 0, power: 0 },
   inv: [],
   equip: { outfit: null, gloves: null }
 };
@@ -206,7 +215,7 @@ function load() {
     RUN.coins = d.coins || 0; RUN.gems = d.gems || 0;
     RUN.streak = d.streak || 0; RUN.best = d.best || 0;
     RUN.diff = typeof d.diff === "number" ? d.diff : 1;
-    RUN.up = { hearts: (d.up && d.up.hearts) || 0, grip: (d.up && d.up.grip) || 0 };
+    RUN.up = { hearts: (d.up && d.up.hearts) || 0, grip: (d.up && d.up.grip) || 0, power: (d.up && d.up.power) || 0 };
     RUN.inv = d.inv; RUN.equip = d.equip || { outfit: null, gloves: null };
     return true;
   } catch (e) { return false; }
@@ -637,9 +646,10 @@ function spinSpeed(base) {
 }
 function newSpin(speedMul, zoneMul) {
   var C = curveFor(G.lvl), lvlF = 1 + (G.lvl - 1) * 0.055;
-  var raw = Math.min(900, (270 + (G.round - 1) * 34) * C.speed * lvlF * (speedMul || 1));
+  var r = Math.min(G.round, ROUND_RAMP_CAP);      /* stop ramping past the cap */
+  var raw = Math.min(900, (270 + (r - 1) * 34) * C.speed * lvlF * (speedMul || 1));
   G.speed = spinSpeed(raw);
-  var zBase = Math.max(15, 64 - (G.round - 1) * 4.5);
+  var zBase = Math.max(15, 64 - (r - 1) * 4.5);
   G.zone = clamp(zBase * C.zone * (1 + RUN.up.grip * GRIP_BONUS) * (zoneMul || 1), 12, 95);
   G.perfect = Math.max(5, G.zone * 0.32);
   G.zoneCenter = rnd(0, 360);
@@ -709,7 +719,7 @@ function gloveProc(isWhite) {
   return Math.random() < chance ? g.stat : null;
 }
 function attackDamage(isWhite) {
-  var d = (isWhite ? DMG.white : DMG.yellow) * powerFor(G.lvl);
+  var d = ((isWhite ? DMG.white : DMG.yellow) + powerBonus()) * powerFor(G.lvl);
   var g = equipped("gloves");
   if (g && g.stat === "power") d *= g.val;
   if (G.banked > 0) { d += G.banked * (isWhite ? ABSORB_WHITE : 1); G.banked = 0; }
@@ -779,7 +789,7 @@ function resolveDefend(kind) {
     addCharge(CHARGE.counter);
     setTimeout(function () {
       setAnim(foe, "hurt"); burst(.6, 1.78, 0, C.torch); shake(1.4); SFX.counter();
-      dealToFoe(Math.round(DMG.counter * powerFor(G.lvl)), "#ffc244", "");
+      dealToFoe(Math.round((DMG.counter + powerBonus()) * powerFor(G.lvl)), "#ffc244", "");
       callout("COUNTER", "#ffc244");
     }, 150);
     pause(1.05, afterDefend);
@@ -804,7 +814,7 @@ function resolveDefend(kind) {
     if (saved === "counter") {
       G.counters++; addCharge(CHARGE.counter);
       setAnim(foe, "hurt"); burst(.6, 1.78, 0, C.torch); shake(1.3); SFX.counter();
-      dealToFoe(Math.round(DMG.counter * powerFor(G.lvl)), "#ffc244", "");
+      dealToFoe(Math.round((DMG.counter + powerBonus()) * powerFor(G.lvl)), "#ffc244", "");
       callout("OUTFIT COUNTER", "#ffc244");
     } else if (saved === "evade") {
       setAnim(you, "evade"); SFX.evade();
@@ -834,7 +844,7 @@ function resolveSpecialHit(kind) {
   if (kind === "miss") { G.spAll = false; G.misses++; SFX.whiff(); }
   else {
     G.hits++; if (white) G.perfects++; else G.spAll = false;
-    G.spDmg += white ? DMG.white : DMG.yellow;
+    G.spDmg += (white ? DMG.white : DMG.yellow) + powerBonus();
     if (white) SFX.perfect(); else SFX.hit();
   }
   G.spLeft--;
@@ -1356,7 +1366,7 @@ $("survey-btn").addEventListener("click", function () {
 
 $("reset-btn").addEventListener("click", function () {
   RUN.coins = 0; RUN.gems = 0; RUN.streak = 0; RUN.diff = 1;
-  RUN.up = { hearts: 0, grip: 0 };
+  RUN.up = { hearts: 0, grip: 0, power: 0 };
   stockWardrobe(); applyOutfitLook();
   SFX.nope(); save(); renderPit();
 });
