@@ -45,8 +45,8 @@ function entryFee(lvl) { return Math.round(DIFFS[RUN.diff].fee * lvl); }
 
 /* Shop is deliberately tiny now - coins are for chests. */
 var UPGRADES = [
-  { k: "hearts", name: "HEART SLOTS", desc: "One more heart to lose", max: 2, costs: [140, 340] },
-  { k: "grip",   name: "GRIP",        desc: "Widens the gold arc a little", max: 1, costs: [180] }
+  { k: "hearts", name: "HEART SLOTS", desc: "One more heart to lose", max: 2, costs: [1500, 2000] },
+  { k: "grip",   name: "GRIP",        desc: "Widens the gold arc a little", max: 1, costs: [3000] }
 ];
 var GRIP_BONUS = 0.06;
 
