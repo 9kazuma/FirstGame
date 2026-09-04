@@ -544,7 +544,7 @@ function renderHearts(node, cur, max, color) {
 var $ = function (id) { return document.getElementById(id); };
 var hpYouEl = $("hp-you"), hpNumEl = $("foe-hp-num"), hpFillEl = $("foe-hp-fill"), statusEl = $("foe-status");
 var calloutEl = $("callout"), phaseEl = $("phase-tag");
-var spFill = $("sp-fill"), spPct = $("sp-pct"), spTrack = $("sp-track"), spBtn = $("sp-btn");
+var spFill = $("sp-fill"), spPct = $("sp-pct"), spTrack = $("sp-track"), spBtn = $("sp-btn"), spLabel = $("sp-label");
 
 function renderFoeHP() {
   hpNumEl.innerHTML = Math.max(0, Math.round(G.foeHP)) + '<span class="max"> / ' + G.foeMax + "</span>";
@@ -560,8 +560,13 @@ function renderSpecial() {
   spFill.style.width = G.special + "%";
   spPct.textContent = Math.round(G.special) + "%";
   var full = G.special >= 100;
+  /* only YOUR turn can spend it - during his swing the bar must not look
+     like something you can press, or you tap it and nothing happens */
+  var yours = (G.phase === "attack" || G.phase === "offer");
   spTrack.classList.toggle("full", full);
-  spBtn.classList.toggle("on", full && (G.phase === "attack" || G.phase === "offer"));
+  spTrack.classList.toggle("waiting", full && !yours);
+  spBtn.classList.toggle("on", full && yours);
+  spLabel.textContent = full ? (yours ? "SPECIAL READY" : "READY NEXT TURN") : "SPECIAL";
 }
 function addCharge(n) {
   var was = G.special;
@@ -606,7 +611,7 @@ var G = {
   shake: 0, resolveT: 0, resolveLen: 1.0, after: null
 };
 
-function pause(len, fn) { G.phase = "resolve"; G.resolveT = 0; G.resolveLen = len; G.after = fn; }
+function pause(len, fn) { G.phase = "resolve"; G.resolveT = 0; G.resolveLen = len; G.after = fn; renderSpecial(); }
 
 function beginBattle() {
   var lvl = foeLevel(), d = spawnFoe(lvl);
@@ -683,7 +688,7 @@ function startSpecialSpin() {
   hubR.textContent = (SPECIAL_HITS - G.spLeft + 1) + "/" + SPECIAL_HITS;
   hubL.textContent = "SPECIAL";
   phaseEl.className = "spc"; phaseEl.textContent = "SPECIAL - " + G.spLeft + " SLAMS LEFT";
-  setAnim(you, "windup");
+  if (you.anim.name !== "windup") setAnim(you, "windup");   /* keep the coil, don't restart it */
   $("hint").textContent = "KEEP SLAMMING - ALL WHITE = x" + SPECIAL_ALL_WHITE;
   renderSpecial();
 }
@@ -832,10 +837,10 @@ function resolveSpecialHit(kind) {
     G.spDmg += white ? DMG.white : DMG.yellow;
     if (white) SFX.perfect(); else SFX.hit();
   }
-  setAnim(you, "slam");
   G.spLeft--;
   if (G.spLeft > 0) {
-    if (kind !== "miss") {                       /* spark per landed spin, brighter on white */
+    /* mid-combo: hold the coil, don't swing yet - just a jolt of feedback */
+    if (kind !== "miss") {
       burst(.55, 1.8, 0, white ? C.torch : C.plank);
       shake(white ? .8 : .5);
     }
@@ -843,7 +848,8 @@ function resolveSpecialHit(kind) {
     pause(0.34, startSpecialSpin);
     return;
   }
-  /* final blow */
+  /* final blow - the one and only swing of the combo */
+  setAnim(you, "slam");
   var total = Math.round(G.spDmg * (G.spAll ? SPECIAL_ALL_WHITE : 1) * powerFor(G.lvl));
   var g = equipped("gloves");
   if (g && g.stat === "power") total = Math.round(total * g.val);
@@ -915,8 +921,15 @@ function tick(dt) {
   if (LIVE[G.phase]) {
     var b = G.marker;
     G.marker = (G.marker + G.speed * dt) % 360; G.travel += G.speed * dt;
-    var att = G.phase === "defend" ? foe : you;
-    if (att) att.wind = clamp(G.travel / G.maxTravel, 0, 1);
+    if (G.phase === "special") {
+      /* one continuous wind-up across all four spins - the arm keeps coiling
+         instead of resetting on every tap, and only releases on the last */
+      var done = SPECIAL_HITS - G.spLeft;
+      you.wind = clamp((done + G.travel / G.maxTravel) / SPECIAL_HITS, 0, 1);
+    } else {
+      var att = G.phase === "defend" ? foe : you;
+      if (att) att.wind = clamp(G.travel / G.maxTravel, 0, 1);
+    }
     if (Math.abs(angDiff(b, G.zoneCenter)) > G.zone / 2 && Math.abs(angDiff(G.marker, G.zoneCenter)) <= G.zone / 2) SFX.tick();
     if (G.travel >= G.maxTravel) {
       if (G.phase === "attack") resolveAttack("miss");
