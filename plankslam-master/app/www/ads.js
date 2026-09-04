@@ -9,6 +9,7 @@ window.Ads = (function () {
 
   const BANNER_ID = "ca-app-pub-3940256099942544/6300978111";
   const INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712";
+  const REWARDED_ID = "ca-app-pub-3940256099942544/5224354917";
   const FIGHTS_PER_INTERSTITIAL = 3;
 
   let ready = false;
@@ -73,6 +74,20 @@ window.Ads = (function () {
     }
   }
 
-  return { init, showBanner, hideBanner, onFightFinished };
+  // Rewarded video -> the game pays out 2 gems, but ONLY if the user actually
+  // earned the reward. Resolves false when the ad is unavailable or dismissed early.
+  async function showRewarded() {
+    if (!AdMob || !ready) return false;
+    try {
+      await AdMob.prepareRewardVideoAd({ adId: REWARDED_ID, isTesting: true });
+      const reward = await AdMob.showRewardVideoAd();
+      return !!(reward && reward.amount > 0);
+    } catch (e) {
+      console.warn("Rewarded ad failed", e);
+      return false;
+    }
+  }
+
+  return { init, showBanner, hideBanner, onFightFinished, showRewarded };
 })();
 document.addEventListener("DOMContentLoaded", function () { window.Ads.init(); });
