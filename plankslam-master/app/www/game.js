@@ -30,10 +30,12 @@ var CHARGE = { white: 15, yellow: 10, counter: 15, block: 10, taken: 5 };
 var C = { pitch: 0x17131f, plank: 0xb4813f, plankDark: 0x6b4a22, lapis: 0x4668e8,
           redstone: 0xe0453a, torch: 0xffc244, bone: 0xf2ede1 };
 
+/* Stakes: coin payout only. Difficulty comes from curveFor(level) below,
+   so these no longer carry speed/zone/hp - change CURVE_* for difficulty. */
 var DIFFS = [
-  { key: "ROOKIE",      speed: 0.85, zone: 1.16, hp: 0, reward: 1.0 },
-  { key: "BRAWLER",     speed: 1.00, zone: 1.00, hp: 1, reward: 1.9 },
-  { key: "BONECRUSHER", speed: 1.22, zone: 0.80, hp: 2, reward: 3.4 }
+  { key: "COPPER", reward: 1.0 },
+  { key: "SILVER", reward: 1.9 },
+  { key: "GOLD",   reward: 3.4 }
 ];
 
 /* Shop is deliberately tiny now - coins are for chests. */
