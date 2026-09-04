@@ -25,7 +25,7 @@ var CHILL_SPEED = 0.62;   // speed multiplier while chilled
 var WHITE_PROC_BONUS = 10;// +10 percentage points to glove proc odds on a white hit
 
 /* special charge gains */
-var CHARGE = { white: 10, yellow: 5, counter: 10, block: 5, taken: 10 };
+var CHARGE = { white: 10, yellow: 5, counter: 10, block: 10, taken: 10 };
 
 var C = { pitch: 0x17131f, plank: 0xb4813f, plankDark: 0x6b4a22, lapis: 0x4668e8,
           redstone: 0xe0453a, torch: 0xffc244, bone: 0xf2ede1 };
