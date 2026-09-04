@@ -958,22 +958,122 @@ function openChest(ch) {
   if (have < ch.cost) { SFX.nope(); return; }
   if (ch.cur === "coins") RUN.coins -= ch.cost; else RUN.gems -= ch.cost;
   var result = rollTable(ch.table);
+  var res;
   if (result === "gold") {
     var bonus = rndInt(120, 340);
-    RUN.coins += bonus; save(); SFX.coin();
-    showReveal({ gold: bonus });
-    renderPit();
-    return;
+    RUN.coins += bonus;
+    res = { gold: bonus };
+  } else {
+    var kind = Math.random() < 0.5 ? "outfit" : "gloves";
+    var type = pick(kind === "outfit" ? OUTFITS : GLOVES).t;
+    var item = makeItem(kind, type, result, false);
+    var dupe = RUN.inv.some(function (i) { return i.kind === item.kind && i.type === item.type && i.tier === item.tier && i.val >= item.val; });
+    RUN.inv.push(item);
+    res = { item: item, dupe: dupe };
   }
-  var kind = Math.random() < 0.5 ? "outfit" : "gloves";
-  var type = pick(kind === "outfit" ? OUTFITS : GLOVES).t;
-  var item = makeItem(kind, type, result, false);
-  var dupe = RUN.inv.some(function (i) { return i.kind === item.kind && i.type === item.type && i.tier === item.tier && i.val >= item.val; });
-  RUN.inv.push(item);
-  save(); SFX.buy(); if (result === "legendary") SFX.gem();
-  showReveal({ item: item, dupe: dupe });
+  save();
   renderPit();
+  /* the roll is already decided - the reel just plays it back */
+  runCaseReel(ch, res, function () {
+    if (res.gold) SFX.coin();
+    else { SFX.buy(); if (res.item.tier === "legendary") SFX.gem(); }
+    showReveal(res);
+  });
 }
+/* ------------------------------------------------------------
+   CASE OPENING REEL
+   A strip of candidate items scrolls past a centre marker and eases
+   to a stop with the real drop under it. Purely cosmetic - the roll
+   already happened, this just shows it.
+------------------------------------------------------------ */
+var REEL_CELL = 116;        // 110px cell + 6px gap
+var REEL_LEN = 58;          // cells built
+var REEL_WIN = 48;          // index the real drop sits at
+var REEL_MS = 4200;         // spin duration
+var reelBusy = false, reelDone = null, reelSettle = null;
+
+function reelCellEl(tier, label, isCoin) {
+  var d = document.createElement("div");
+  d.className = "reel-cell";
+  var meta = TIER[tier];
+  d.style.borderBottomColor = isCoin ? "#c9922a" : meta.color;
+  var chip = document.createElement("span");
+  chip.className = "rc-tier";
+  chip.style.background = isCoin ? "#c9922a" : meta.color;
+  chip.textContent = isCoin ? "GOLD" : meta.name;
+  d.appendChild(chip);
+  if (isCoin) { var ic = coinIcon(); ic.setAttribute("class", "rc-icon"); d.appendChild(ic); }
+  var n = document.createElement("div");
+  n.className = "rc-name"; n.textContent = label;
+  d.appendChild(n);
+  return d;
+}
+
+/* a plausible-looking filler drop for this chest */
+function reelFiller(chest) {
+  var t = rollTable(chest.table);
+  if (t === "gold") return { gold: true, tier: "common", label: "COIN" };
+  var kind = Math.random() < 0.5 ? "outfit" : "gloves";
+  var def = pick(kind === "outfit" ? OUTFITS : GLOVES);
+  return { gold: false, tier: t, label: def.name };
+}
+
+function runCaseReel(chest, res, done) {
+  var reel = $("reel"), win = document.querySelector(".reel-window");
+  $("case-name").textContent = chest.name;
+  reel.innerHTML = "";
+  var i, cells = [];
+  for (i = 0; i < REEL_LEN; i++) {
+    if (i === REEL_WIN) {
+      cells.push(res.gold
+        ? { gold: true, tier: "common", label: "+" + res.gold + " COIN" }
+        : { gold: false, tier: res.item.tier, label: itemName(res.item) });
+    } else cells.push(reelFiller(chest));
+  }
+  cells.forEach(function (c) { reel.appendChild(reelCellEl(c.tier, c.label, c.gold)); });
+
+  $("case").hidden = false;
+  win.classList.remove("landed");
+
+  var winW = win.clientWidth || 560;
+  var jitter = rnd(-38, 38);                       /* don't always land dead centre */
+  var target = REEL_WIN * REEL_CELL + REEL_CELL / 2 - winW / 2 + jitter;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  reelDone = done;
+  function settle(fast) {
+    reel.style.transform = "translateX(" + (-target) + "px)";
+    win.classList.add("landed");
+    reelBusy = false;
+    setTimeout(function () {
+      $("case").hidden = true;
+      var d = reelDone; reelDone = null;
+      if (d) d();                                  /* fires once, skip or not */
+    }, fast ? 120 : 620);
+  }
+  reelSettle = settle;
+  if (reduced) { settle(true); return; }
+
+  var t0 = performance.now(), lastCell = -1, lastTick = 0;
+  reelBusy = true;
+  (function frame(now) {
+    var t = clamp((now - t0) / REEL_MS, 0, 1);
+    var e = 1 - Math.pow(1 - t, 4);                /* hard ease-out, CS-style */
+    var x = target * e;
+    reel.style.transform = "translateX(" + (-x) + "px)";
+    var cell = Math.floor((x + winW / 2) / REEL_CELL);
+    if (cell !== lastCell && now - lastTick > 28) { lastCell = cell; lastTick = now; SFX.tick(); }
+    if (!reelBusy) return;                          /* skipped */
+    if (t < 1) requestAnimationFrame(frame); else settle();
+  })(t0);
+}
+/* tap during the spin to jump straight to the result */
+function skipReel() {
+  if (!reelBusy || !reelSettle) return;
+  reelBusy = false;
+  reelSettle(true);
+}
+
 function showReveal(res) {
   var card = $("rv-card");
   card.innerHTML = "";
@@ -1178,6 +1278,7 @@ Array.prototype.forEach.call($("ward-tabs").children, function (b) {
   b.addEventListener("click", function () { wardKind = b.dataset.kind; SFX.buy(); renderWardrobe(); });
 });
 $("rv-close").addEventListener("click", function () { $("reveal").hidden = true; });
+$("case").addEventListener("click", skipReel);
 
 $("ad-btn").addEventListener("click", function () {
   var btn = $("ad-btn"); btn.disabled = true; btn.textContent = "LOADING AD...";

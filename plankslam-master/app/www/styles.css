@@ -194,6 +194,28 @@ canvas{display:block;width:100%;height:100%}
 .it-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #a97a1d}
 .it-btn.on{background:transparent;color:rgba(242,237,225,.5);box-shadow:inset 0 0 0 2px rgba(242,237,225,.2)}
 
+/* ---------- case opening reel ---------- */
+#case{gap:18px}
+.case-name{font-family:var(--display);font-size:clamp(11px,3vw,15px);letter-spacing:.2em;color:var(--torch)}
+.case-hint{font-family:var(--display);font-size:8.5px;letter-spacing:.18em;opacity:.35}
+.reel-window{position:relative;width:min(600px,94vw);height:122px;overflow:hidden;border-radius:2px;
+  background:rgba(0,0,0,.34);box-shadow:inset 0 0 0 2px rgba(242,237,225,.14)}
+.reel{position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform}
+.reel-cell{flex:0 0 110px;width:110px;height:100%;margin-right:6px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:7px;padding:8px 6px;box-sizing:border-box;
+  background:rgba(242,237,225,.05);border-bottom:4px solid var(--dead)}
+.reel-cell .rc-tier{font-family:var(--display);font-size:7px;letter-spacing:.14em;padding:2px 5px;border-radius:1px;color:#17131f}
+.reel-cell .rc-name{font-family:var(--display);font-size:7.5px;letter-spacing:.06em;text-align:center;line-height:1.5;opacity:.85}
+.reel-cell .rc-icon{width:30px;height:30px;display:block}
+.reel-marker{position:absolute;left:50%;top:0;bottom:0;width:3px;transform:translateX(-50%);
+  background:var(--torch);box-shadow:0 0 14px 3px rgba(255,194,68,.75);z-index:3}
+.reel-fade{position:absolute;top:0;bottom:0;width:70px;pointer-events:none;z-index:2}
+.reel-fade.left{left:0;background:linear-gradient(90deg,rgba(23,19,31,.95),rgba(23,19,31,0))}
+.reel-fade.right{right:0;background:linear-gradient(270deg,rgba(23,19,31,.95),rgba(23,19,31,0))}
+.reel-window.landed{animation:reelpop .4s ease-out}
+@keyframes reelpop{0%{transform:scale(1)}35%{transform:scale(1.035)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.reel-window.landed{animation:none}}
+
 /* ---------- reveal ---------- */
 #reveal .rv-card{display:flex;flex-direction:column;align-items:center;gap:14px;padding:26px 30px;border-radius:3px;
   background:rgba(242,237,225,.05);box-shadow:inset 0 0 0 3px currentColor;animation:rvpop .45s ease-out}
