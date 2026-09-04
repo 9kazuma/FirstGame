@@ -61,7 +61,11 @@ var powerBonus = function () { return RUN.up.power; };
 /* The dial gets faster and the arc tighter each round of a fight. Past this
    round it stops escalating - by round 11 it is already brutal and further
    ramping just made long fights unwinnable rather than harder. */
-var ROUND_RAMP_CAP = 11;
+var ROUND_RAMP_CAP = 10;    // round the ramp stops at
+var RAMP_SPEED = 27;        // deg/s added per round (was 34 - gentler climb)
+var ARC_BASE = 70;          // gold arc width in degrees at round 1
+var ARC_SHRINK = 4.0;       // degrees the arc loses per round
+var ARC_FLOOR = 18;         // never tighter than this
 
 /* ------------------------------------------------------------
    ENDLESS SCALING
@@ -103,7 +107,7 @@ var FOES = [
   { n: "THE GRUNT",   skin: 0x86a35c, shirt: 0x6f8f45, pants: 0x38292c, hair: 0x2c2118 },
   { n: "THE BRUTE",   skin: 0x86a35c, shirt: 0xc8382f, pants: 0x38292c, hair: 0x2c2118 },
   { n: "IRONJAW",     skin: 0x9aa0a6, shirt: 0x54606e, pants: 0x2f3238, hair: 0x33383e },
-  { n: "DEVIANA",      skin: 0x7c5b52, shirt: 0x8e2b22, pants: 0x2b1f1f, hair: 0x1e1614 },
+  { n: "DEVIANA",     skin: 0xc98d6f, shirt: 0x8e2b22, pants: 0x2b1f1f, hair: 0x241a2e, female: true },
   { n: "THE WARDEN",  skin: 0x8e7ab5, shirt: 0x59357f, pants: 0x2c2140, hair: 0x1d1630 },
   { n: "HUBERT", skin: 0xd0b48a, shirt: 0x1f6f63, pants: 0x243231, hair: 0xe8e2d4 }
 ];
@@ -113,7 +117,7 @@ var isBoss = function (lvl) { return lvl % 5 === 0; };
 function foeFor(level) {
   var i = (level - 1) % FOES.length, cycle = Math.floor((level - 1) / FOES.length), f = FOES[i];
   return { n: cycle ? f.n + " " + (ROMAN[cycle + 1] || ("+" + cycle)) : f.n,
-           skin: f.skin, shirt: f.shirt, pants: f.pants, hair: f.hair };
+           skin: f.skin, shirt: f.shirt, pants: f.pants, hair: f.hair, female: !!f.female };
 }
 
 var rnd = function (a, b) { return a + Math.random() * (b - a); };
@@ -317,23 +321,31 @@ function box(w, h, d, color) {
   scene.add(t);
 })();
 
-function makeFighter(skin, shirt, pants, hair, scale) {
+function makeFighter(skin, shirt, pants, hair, scale, female) {
   var u = 0.11 * (scale || 1), g = new THREE.Group(), parts = [], shirtParts = [], pantsParts = [], hairParts = [];
   var add = function (m) { parts.push(m); return m; };
-  var lL = add(box(4 * u, 12 * u, 4 * u, pants)); lL.position.set(-2 * u, 6 * u, 0); pantsParts.push(lL);
-  var lR = add(box(4 * u, 12 * u, 4 * u, pants)); lR.position.set(2 * u, 6 * u, 0); pantsParts.push(lR);
+  /* female build: narrower shoulders and waist, arms tucked closer in */
+  var torsoW = female ? 6.4 : 8, shoulder = female ? 5.2 : 6, limbW = female ? 3.4 : 4;
+  var lL = add(box(limbW * u, 12 * u, 4 * u, pants)); lL.position.set(-1.8 * u, 6 * u, 0); pantsParts.push(lL);
+  var lR = add(box(limbW * u, 12 * u, 4 * u, pants)); lR.position.set(1.8 * u, 6 * u, 0); pantsParts.push(lR);
   g.add(lL, lR);
-  var torso = add(box(8 * u, 12 * u, 4 * u, shirt)); torso.position.y = 18 * u; g.add(torso); shirtParts.push(torso);
+  var torso = add(box(torsoW * u, 12 * u, 4 * u, shirt)); torso.position.y = 18 * u; g.add(torso); shirtParts.push(torso);
   var head = new THREE.Group(); head.position.y = 24 * u;
   var skull = add(box(8 * u, 8 * u, 8 * u, skin)); skull.position.y = 4 * u; head.add(skull);
   var cap = add(box(8.3 * u, 3.2 * u, 8.3 * u, hair)); cap.position.y = 6.6 * u; head.add(cap); hairParts.push(cap);
+  if (female) {
+    /* hair falling down the back, plus a strand either side of the face */
+    var back = add(box(8.3 * u, 11 * u, 2.6 * u, hair)); back.position.set(0, 1.2 * u, -3.4 * u); head.add(back); hairParts.push(back);
+    var sL = add(box(1.9 * u, 7 * u, 6.4 * u, hair)); sL.position.set(-4.3 * u, 2.4 * u, -.4 * u); head.add(sL); hairParts.push(sL);
+    var sR = add(box(1.9 * u, 7 * u, 6.4 * u, hair)); sR.position.set(4.3 * u, 2.4 * u, -.4 * u); head.add(sR); hairParts.push(sR);
+  }
   var eL = add(box(1.6 * u, 1.6 * u, .4 * u, 0x1b1420)); eL.position.set(-1.8 * u, 4.2 * u, 4.05 * u);
   var eR = add(box(1.6 * u, 1.6 * u, .4 * u, 0x1b1420)); eR.position.set(1.8 * u, 4.2 * u, 4.05 * u);
   head.add(eL, eR); g.add(head);
   function arm(sx) {
-    var p = new THREE.Group(); p.position.set(sx * 6 * u, 24 * u, 0);
-    var a = add(box(4 * u, 12 * u, 4 * u, shirt)); a.position.y = -5 * u; p.add(a); shirtParts.push(a);
-    var h = add(box(4.05 * u, 3 * u, 4.05 * u, skin)); h.position.y = -9.5 * u; p.add(h);
+    var p = new THREE.Group(); p.position.set(sx * shoulder * u, 24 * u, 0);
+    var a = add(box(limbW * u, 12 * u, limbW * u, shirt)); a.position.y = -5 * u; p.add(a); shirtParts.push(a);
+    var h = add(box((limbW + .05) * u, 3 * u, (limbW + .05) * u, skin)); h.position.y = -9.5 * u; p.add(h);
     g.add(p); return p;
   }
   return { group: g, head: head, torso: torso, armL: arm(-1), armR: arm(1), parts: parts,
@@ -361,7 +373,7 @@ var foe = null;
 function spawnFoe(level) {
   if (foe) disposeFighter(foe);
   var d = foeFor(level), sc = clamp(1.02 + (level - 1) * 0.035, 1.0, 1.34) * (isBoss(level) ? 1.12 : 1);
-  foe = makeFighter(d.skin, d.shirt, d.pants, d.hair, sc);
+  foe = makeFighter(d.skin, d.shirt, d.pants, d.hair, sc, d.female);
   foe.group.position.set(2.15, 0, 0); foe.group.rotation.y = -Math.PI / 2;
   scene.add(foe.group);
   return d;
@@ -647,9 +659,9 @@ function spinSpeed(base) {
 function newSpin(speedMul, zoneMul) {
   var C = curveFor(G.lvl), lvlF = 1 + (G.lvl - 1) * 0.055;
   var r = Math.min(G.round, ROUND_RAMP_CAP);      /* stop ramping past the cap */
-  var raw = Math.min(900, (270 + (r - 1) * 34) * C.speed * lvlF * (speedMul || 1));
+  var raw = Math.min(900, (270 + (r - 1) * RAMP_SPEED) * C.speed * lvlF * (speedMul || 1));
   G.speed = spinSpeed(raw);
-  var zBase = Math.max(15, 64 - (r - 1) * 4.5);
+  var zBase = Math.max(ARC_FLOOR, ARC_BASE - (r - 1) * ARC_SHRINK);
   G.zone = clamp(zBase * C.zone * (1 + RUN.up.grip * GRIP_BONUS) * (zoneMul || 1), 12, 95);
   G.perfect = Math.max(5, G.zone * 0.32);
   G.zoneCenter = rnd(0, 360);
