@@ -224,6 +224,10 @@ canvas{display:block;width:100%;height:100%}
 .rv-name{font-family:var(--display);font-size:12px;letter-spacing:.1em;color:var(--bone)}
 .rv-eff{font-size:13px;opacity:.72;color:var(--bone);max-width:30ch;line-height:1.5}
 .rv-dupe{font-family:var(--display);font-size:8.5px;letter-spacing:.16em;opacity:.45;color:var(--bone)}
+.rv-sold{display:flex;align-items:center;gap:7px;font-family:var(--display);font-size:9.5px;
+  letter-spacing:.12em;color:var(--torch);background:rgba(255,194,68,.1);
+  box-shadow:inset 0 0 0 2px rgba(255,194,68,.32);border-radius:2px;padding:8px 12px;margin-top:2px}
+.rv-sold svg{width:13px;height:13px;display:block}
 
 #flash{position:fixed;inset:0;pointer-events:none;background:#fff;opacity:0}
 #flash.go{animation:fl .2s ease-out}

@@ -119,6 +119,11 @@ var pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
    20%, matching common = 1%/2% up to legendary = 7-10% / 17-20%.
    "mult" is the flat damage multiplier used by normal gloves.
 ============================================================ */
+/* coin value a duplicate is auto-sold for. A drop is a duplicate when you
+   already hold the same item and tier at an equal or better roll; if the new
+   one rolls higher it is kept and the old one is sold instead. */
+var DUPE_VALUE = { common: 100, normal: 150, rare: 300, epic: 800, legendary: 1500 };
+
 var TIERS = ["common", "normal", "rare", "epic", "legendary"];
 var TIER = {
   common:    { name: "COMMON",    color: "#9aa0a6", s10: [1, 1],  s20: [1, 2],   mult: [1.05, 1.10] },
@@ -967,9 +972,31 @@ function openChest(ch) {
     var kind = Math.random() < 0.5 ? "outfit" : "gloves";
     var type = pick(kind === "outfit" ? OUTFITS : GLOVES).t;
     var item = makeItem(kind, type, result, false);
-    var dupe = RUN.inv.some(function (i) { return i.kind === item.kind && i.type === item.type && i.tier === item.tier && i.val >= item.val; });
-    RUN.inv.push(item);
-    res = { item: item, dupe: dupe };
+    /* find the best copy already owned of this exact item and tier */
+    var bestIdx = -1, best = null;
+    RUN.inv.forEach(function (it, idx) {
+      if (it.kind === item.kind && it.type === item.type && it.tier === item.tier) {
+        if (!best || it.val > best.val) { best = it; bestIdx = idx; }
+      }
+    });
+    if (best && best.val >= item.val) {
+      /* duplicate - never enters the wardrobe, straight to coin */
+      var paid = DUPE_VALUE[item.tier] || 0;
+      RUN.coins += paid;
+      res = { item: item, sold: paid };
+    } else if (best) {
+      /* better roll - keep it and sell the older, weaker copy */
+      var paidOld = DUPE_VALUE[best.tier] || 0;
+      RUN.coins += paidOld;
+      var wasEquipped = RUN.equip[item.kind] === best.uid;
+      RUN.inv.splice(bestIdx, 1);
+      RUN.inv.push(item);
+      if (wasEquipped) RUN.equip[item.kind] = item.uid;   /* don't unequip the player */
+      res = { item: item, sold: paidOld, upgraded: best.val };
+    } else {
+      RUN.inv.push(item);
+      res = { item: item };
+    }
   }
   save();
   renderPit();
@@ -1087,7 +1114,14 @@ function showReveal(res) {
     var tt = document.createElement("div"); tt.className = "rv-tier"; tt.textContent = meta.name; card.appendChild(tt);
     var nn = document.createElement("div"); nn.className = "rv-name"; nn.textContent = itemName(it); card.appendChild(nn);
     var ee = document.createElement("div"); ee.className = "rv-eff"; ee.textContent = itemEff(it); card.appendChild(ee);
-    if (res.dupe) { var dd = document.createElement("div"); dd.className = "rv-dupe"; dd.textContent = "YOU ALREADY HAD BETTER OR EQUAL"; card.appendChild(dd); }
+    if (res.sold) {
+      var sold = document.createElement("div");
+      sold.className = "rv-sold";
+      sold.appendChild(coinIcon());
+      sold.appendChild(document.createTextNode(
+        (res.upgraded !== undefined ? "UPGRADED - OLD ONE SOLD  +" : "DUPLICATE - SOLD  +") + res.sold));
+      card.appendChild(sold);
+    }
   }
   $("reveal").hidden = false;
 }
