@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -24,6 +25,13 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Re-theme AdMob's own activity so its close button cannot land under
+             a display cutout while the game is locked to landscape. -->
+        <activity
+            android:name="com.google.android.gms.ads.AdActivity"
+            android:theme="@style/AdActivityTheme"
+            tools:replace="android:theme" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

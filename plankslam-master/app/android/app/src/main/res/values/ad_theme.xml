@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The AdMob activity ships with @android:style/Theme.Translucent, which
+         sets no cutout mode. Under targetSdk 35+ that means the ad window lays
+         out INTO the display cutout in every orientation, and in our forced
+         landscape the close X - which sits about 40px from the top-right
+         corner - can end up under the camera cutout on a small phone.
+         We re-theme the activity so the window keeps clear of it. -->
+    <style name="AdActivityTheme" parent="@android:style/Theme.Translucent" />
+</resources>

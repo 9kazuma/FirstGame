@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>SlapWars</title>
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,11 @@
     <div class="fighter-tag">
       <div class="name you">YOU</div>
       <div class="hearts" id="hp-you"></div>
+      <div class="shields" id="shield-row"></div>
     </div>
+    <button id="pause-btn" type="button" aria-label="Pause fight">
+      <svg viewBox="0 0 10 12" aria-hidden="true"><rect x="1" y="1" width="3" height="10"/><rect x="6" y="1" width="3" height="10"/></svg>
+    </button>
     <div class="fighter-tag foe">
       <div class="name foe" id="foe-name">THE GRUNT</div>
       <div class="sub" id="foe-sub">LV 1</div>
@@ -44,12 +48,20 @@
 <div id="phase-tag"></div>
 <div id="callout"></div>
 <div id="flash"></div>
+<div id="countdown" hidden><span id="count-n"></span></div>
+
+<div id="qte" hidden>
+  <div class="qte-body" id="qte-body"></div>
+  <div class="qte-bar"><i id="qte-timer"></i></div>
+  <div class="qte-hint" id="qte-hint"></div>
+</div>
 
 <div class="screen" id="menu">
   <div class="kicker">TABLETOP SLAP DUEL</div>
   <h1 class="title">SlapWars</h1>
   <p class="blurb">Slam when the block crosses the <em>gold arc</em> - the white core hits twice as hard. Then he swings back: gold <em>blocks</em>, white <em>counters</em>.</p>
-  <p class="blurb">Every exchange charges your <em>special</em>. At 100% you get four slams in a row - land all four white for double damage.</p>
+  <p class="blurb">Every exchange charges your <em>special</em>. At 100% you unleash your fighter's combo - land every spin white for double damage.</p>
+  <p class="blurb">His swing is a <em>coin toss</em>: six different reflex tests, and each opponent has a favourite. Nail it to counter, scrape it to block.</p>
   <p class="blurb">Coins buy chests. Chests hold outfits and gloves across five tiers. Bosses and ads pay gems.</p>
   <button class="btn" id="start-btn">Enter the pit</button>
 </div>
@@ -73,7 +85,7 @@
     </div>
 
     <div>
-      <div class="sec-label" style="margin-bottom:2px">TRAINING</div>
+      <div class="sec-label" style="margin-bottom:2px">TRAINING - LOST WHEN YOU FALL</div>
       <div id="shop"></div>
     </div>
 
@@ -83,7 +95,11 @@
     </div>
 
     <div class="side-row">
+      <button class="btn ghost" id="ally-btn">Fighter</button>
+      <button class="btn ghost" id="map-btn">Arena</button>
       <button class="btn ghost" id="ward-btn">Wardrobe</button>
+      <button class="btn ghost" id="gal-btn">Gallery</button>
+      <button class="btn ghost" id="set-btn">Settings</button>
       <button class="btn" id="ad-btn">WATCH AD +2 GEM</button>
     </div>
 
@@ -111,6 +127,55 @@
     <div class="grid" id="ward-grid"></div>
     <div class="foot"><button class="btn" id="ward-back">Back to the pit</button></div>
   </div>
+</div>
+
+<div class="screen" id="allies" hidden>
+  <div class="pit-inner">
+    <div class="sec-label" style="text-align:center">PICK YOUR FIGHTER</div>
+    <div class="grid" id="ally-grid"></div>
+    <div class="foot"><button class="btn" id="ally-back">Back to the pit</button></div>
+  </div>
+</div>
+
+<div class="screen" id="gallery" hidden>
+  <div class="pit-inner">
+    <div class="sec-label" style="text-align:center">GALLERY</div>
+    <div id="gal-body"></div>
+    <div class="foot"><button class="btn" id="gal-back">Back to the pit</button></div>
+  </div>
+</div>
+
+<div class="screen" id="settings" hidden>
+  <div class="pit-inner">
+    <div class="sec-label" style="text-align:center">SETTINGS</div>
+    <div class="grid" id="set-grid"></div>
+    <div class="foot"><button class="btn" id="set-back">Back to the pit</button></div>
+  </div>
+</div>
+
+<div class="screen" id="maps" hidden>
+  <div class="pit-inner">
+    <div class="sec-label" style="text-align:center">PICK YOUR ARENA</div>
+    <div class="grid" id="map-grid"></div>
+    <div class="foot"><button class="btn" id="map-back">Back to the pit</button></div>
+  </div>
+</div>
+
+<div class="screen" id="boons" hidden>
+  <div class="pit-inner">
+    <div class="kicker">BOSS DOWN</div>
+    <div class="sec-label" style="text-align:center">TAKE ONE BLESSING</div>
+    <div class="grid" id="boon-grid"></div>
+    <div class="boon-note">Blessings last until you hit the floor.</div>
+  </div>
+</div>
+
+<div class="screen" id="paused" hidden>
+  <div class="kicker">PAUSED</div>
+  <h2 class="verdict">TAKE A BREATH</h2>
+  <p class="tally" id="pause-stat"></p>
+  <button class="btn" id="resume-btn">Resume</button>
+  <button class="btn ghost" id="quit-btn">Quit fight - counts as a loss</button>
 </div>
 
 <div class="screen" id="over" hidden>

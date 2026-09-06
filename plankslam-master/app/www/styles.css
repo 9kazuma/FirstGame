@@ -7,6 +7,17 @@
   --t-common:#9aa0a6; --t-normal:#7fa24f; --t-rare:#5a7cf0; --t-epic:#b06bf5; --t-legendary:#ffc244;
   --display:"Silkscreen","Courier New",monospace;
   --body:"Space Grotesk","Helvetica Neue",sans-serif;
+
+  /* the app runs edge-to-edge (immersive fullscreen), so the page has to keep
+     its own content clear of the notch and the gesture bar */
+  --sa-t:env(safe-area-inset-top,0px);
+  --sa-b:env(safe-area-inset-bottom,0px);
+  --sa-l:env(safe-area-inset-left,0px);
+  --sa-r:env(safe-area-inset-right,0px);
+
+  /* height of the native AdMob banner overlaying the bottom of the WebView.
+     ads.js keeps this in sync so hub content never hides behind it. */
+  --ad-h:0px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:var(--pitch)}
@@ -16,7 +27,8 @@ canvas{display:block;width:100%;height:100%}
 
 /* ---------- battle HUD ---------- */
 #hud{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
-.bar-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px clamp(12px,3vw,32px) 0}
+.bar-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:calc(14px + var(--sa-t)) calc(clamp(12px,3vw,32px) + var(--sa-r)) 0 calc(clamp(12px,3vw,32px) + var(--sa-l))}
 .fighter-tag{display:flex;flex-direction:column;gap:6px;min-width:0}
 .fighter-tag.foe{align-items:flex-end}
 .name{font-family:var(--display);font-size:10.5px;letter-spacing:.15em;opacity:.85}
@@ -68,7 +80,7 @@ canvas{display:block;width:100%;height:100%}
   32%{transform:translateX(-50%) scale(1)}76%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(1)}}
 
 /* ---------- special bar ---------- */
-.foot-block{padding:0 clamp(12px,4vw,44px) clamp(14px,3vw,26px)}
+.foot-block{padding:0 calc(clamp(12px,4vw,44px) + var(--sa-r)) calc(clamp(14px,3vw,26px) + var(--sa-b)) calc(clamp(12px,4vw,44px) + var(--sa-l))}
 .sp-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
 .sp-label{font-family:var(--display);font-size:8.5px;letter-spacing:.18em;opacity:.55;white-space:nowrap}
 .sp-track{flex:1;height:13px;background:var(--dead);border-radius:1px;overflow:hidden;position:relative}
@@ -86,11 +98,18 @@ canvas{display:block;width:100%;height:100%}
 .hint{text-align:center;font-family:var(--display);font-size:9px;letter-spacing:.16em;opacity:.34;margin-top:9px}
 
 /* ---------- screens ---------- */
-.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:16px;padding:24px 20px;text-align:center;overflow-y:auto;
+.screen{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:16px;text-align:center;overflow-y:auto;overscroll-behavior:contain;
+  padding:calc(24px + var(--sa-t)) calc(20px + var(--sa-r)) calc(24px + var(--sa-b)) calc(20px + var(--sa-l));
   background:radial-gradient(120% 100% at 50% 40%,rgba(23,19,31,.86),rgba(23,19,31,.98));
   backdrop-filter:blur(2px)}
 .screen[hidden]{display:none}
+/* centred when it fits, scrollable from the very top when it does not */
+.screen:not(#pit):not(#wardrobe) > :first-child{margin-top:auto}
+.screen:not(#pit):not(#wardrobe) > :last-child{margin-bottom:auto}
+.title{max-width:100%}
+/* banner showing: push the last rows (survey / reset run) clear of it */
+body.ad-on .screen{padding-bottom:calc(24px + var(--sa-b) + var(--ad-h))}
 .title{font-family:var(--display);font-weight:700;font-size:clamp(32px,9.5vw,70px);letter-spacing:.02em;line-height:.94;
   color:var(--plank);text-shadow:4px 4px 0 var(--plank-dark),8px 8px 0 rgba(0,0,0,.45)}
 .kicker{font-family:var(--display);font-size:9.5px;letter-spacing:.32em;color:var(--torch);opacity:.85}
@@ -109,7 +128,7 @@ canvas{display:block;width:100%;height:100%}
 .tally{font-family:var(--display);font-size:10px;letter-spacing:.16em;opacity:.6;line-height:1.9;white-space:pre-line}
 
 /* ---------- pit (hub) ---------- */
-#pit,#wardrobe{justify-content:flex-start;gap:0;padding-top:clamp(18px,4vh,40px)}
+#pit,#wardrobe{justify-content:flex-start;gap:0;padding-top:calc(clamp(18px,4vh,40px) + var(--sa-t))}
 .pit-inner{width:100%;max-width:540px;display:flex;flex-direction:column;gap:18px}
 .purse{display:flex;align-items:center;justify-content:center;gap:18px;font-family:var(--display);font-size:18px}
 .wallet{display:flex;align-items:center;gap:8px}
@@ -237,3 +256,64 @@ canvas{display:block;width:100%;height:100%}
 @media (prefers-reduced-motion:reduce){#dial.shake{animation:none}#flash.go{animation:none}.dmg-float{animation-duration:.4s}}
 @media (max-height:600px){#dial-wrap{width:min(232px,40vmin);top:43%}
   #callout{top:calc(43% + min(134px,24vmin))}#phase-tag{top:calc(43% - min(128px,23vmin))}}
+
+/* ---------- pause (v1.3) ---------- */
+#pause-btn{pointer-events:auto;flex:0 0 auto;align-self:flex-start;margin-top:2px;cursor:pointer;border:0;
+  width:38px;height:34px;display:none;align-items:center;justify-content:center;border-radius:2px;
+  background:rgba(23,19,31,.55);box-shadow:inset 0 0 0 2px rgba(242,237,225,.22)}
+#pause-btn.on{display:flex}
+#pause-btn svg{width:11px;height:13px;display:block;fill:var(--bone);opacity:.75}
+#pause-btn:active{transform:translateY(2px)}
+#pause-btn:focus-visible{outline:2px solid var(--bone);outline-offset:3px}
+#paused .verdict{color:var(--bone)}
+#paused .btn{min-width:min(280px,72vw)}
+
+/* ---------- QTE (v1.3) ----------
+   His swing rolls one of six challenges. This overlay hosts the five that
+   are not the dial; it sits above the HUD but below the .screen panels, so
+   the pause overlay still covers it. */
+#dial-wrap[hidden]{display:none}
+#qte{position:fixed;left:50%;top:57%;transform:translate(-50%,-50%);z-index:3;
+  width:min(560px,86vw);display:flex;flex-direction:column;align-items:center;gap:8px;
+  pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none}
+#qte *{touch-action:none}
+#qte[hidden]{display:none}
+.qte-body{width:100%;display:flex;align-items:center;justify-content:center;min-height:min(30vmin,34vh)}
+.qte-body svg{width:100%;height:auto;max-height:min(60vmin,46vh);overflow:visible;display:block}
+.qte-bar{width:78%;height:6px;background:var(--dead);border-radius:1px;overflow:hidden}
+.qte-bar i{display:block;height:100%;width:100%;background:var(--torch);transition:none}
+.qte-bar i.low{background:var(--redstone)}
+/* The phase tag is normally positioned against the dial. With a QTE up the
+   dial is hidden, so pin the tag above the board instead of letting it land
+   on top of the dots. */
+body.qte-on #phase-tag{display:none}
+.qte-hint{font-family:var(--display);font-size:clamp(8px,2.2vw,10px);letter-spacing:.16em;opacity:.45;text-align:center}
+.qte-count{font-family:var(--display);font-size:clamp(34px,11vmin,74px);color:var(--bone);letter-spacing:.04em;
+  text-shadow:0 4px 0 rgba(0,0,0,.5)}
+.qte-count.hit{animation:qtepop .12s ease-out}
+@keyframes qtepop{0%{transform:scale(1.28);color:var(--torch)}100%{transform:scale(1)}}
+
+/* ---------- ally select (v1.3) ---------- */
+.ally-kit{font-family:var(--display);font-size:8px;letter-spacing:.14em;opacity:.55;margin-top:6px;line-height:1.9}
+.item.ally .it-name{color:var(--torch)}
+
+/* ---------- boss blessings + countdown (v1.3) ---------- */
+.shields{display:flex;gap:4px;margin-top:2px}
+.shield-pip{width:13px;height:13px;display:block;background:#8fd8ff;border-radius:1px;
+  box-shadow:0 0 8px rgba(143,216,255,.55)}
+.shield-pip.spent{background:#2b3a46;box-shadow:none}
+.boon-note{font-family:var(--display);font-size:8.5px;letter-spacing:.16em;opacity:.4;text-align:center}
+.item.boon .it-name{color:#8fd8ff}
+.item.boon[data-maxed="true"]{opacity:.45}
+.boon-val{font-family:var(--display);font-size:8px;letter-spacing:.14em;opacity:.55;margin-top:6px}
+
+#countdown{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;z-index:4}
+#countdown[hidden]{display:none}
+#count-n{font-family:var(--display);font-size:clamp(64px,22vmin,180px);color:var(--torch);
+  text-shadow:0 8px 0 rgba(0,0,0,.5);animation:countpop .8s ease-out}
+@keyframes countpop{0%{transform:scale(1.7);opacity:0}22%{transform:scale(1);opacity:1}100%{opacity:.85}}
+
+/* arena palette strip on the map cards */
+.map-sw{display:flex;gap:4px;margin:10px 0 2px}
+.map-sw i{flex:1;height:14px;border:1px solid rgba(0,0,0,.45)}

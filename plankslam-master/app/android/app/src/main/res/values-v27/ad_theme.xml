@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 27+ understands the cutout mode; "never" keeps the ad window
+         inside the safe area so its close button is always reachable. -->
+    <style name="AdActivityTheme" parent="@android:style/Theme.Translucent">
+        <item name="android:windowLayoutInDisplayCutoutMode">never</item>
+    </style>
+</resources>
