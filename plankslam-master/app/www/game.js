@@ -22,7 +22,7 @@ var SPECIAL_ALL_WHITE = 2;// damage multiplier if every special spin is white
 var SPECIAL_OFFER_HOLD = 1.2; // seconds the dial freezes so you can choose to unleash
 
 /* playtest feedback form - opens in the system browser, not inside the app */
-var SURVEY_URL = "https://docs.google.com/forms/d/e/1FAIpQLScMGkqqrF7oqVVruWB25vRLTs7ykEnM49UXl5tEXBsqDw2V4Q/viewform";
+var SURVEY_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdBS4Il9xe81VZH4Z6O3cpCXEvmHSDLXvNAgHiA6qh59J5POw/viewform";
 var BURN_PCT = 0.05;      // burning: % of max HP the foe loses whenever he swings
 var BURN_TURNS = 3;       // how many of his swings a burn lasts
 var CHILL_SPINS = 3;      // how many spins a chill proc slows
@@ -72,15 +72,25 @@ var DIFFS = [
 function entryFee(lvl) { return Math.round(DIFFS[RUN.diff].fee * lvl); }
 
 /* Shop is deliberately tiny now - coins are for chests. */
+var SPEED_CAP = 900;        // the fastest the dial will ever spin, deg/s
+var STEADY_STEP = 70;       // STEADY HANDS shaves this much off the cap per level
+var CLOCK_STEP = 0.5;       // LONG CLOCK adds this many seconds to a spin
+
 var UPGRADES = [
   { k: "hearts", name: "HEART SLOTS", desc: "One more heart to lose", max: 2, costs: [1500, 2000] },
   { k: "grip",   name: "GRIP",        desc: "Widens the gold arc a little", max: 1, costs: [3000] },
   { k: "power",  name: "TRAINING",    desc: "+1 base damage on every hit", max: 2, costs: [800, 1800] },
   { k: "focus",  name: "FOCUS",       desc: "Widens the white core a little", max: 2, costs: [1200, 2600] },
-  { k: "mastery", name: "MASTERY", cur: "gems", max: 1, costs: [3],
+  { k: "steady", name: "STEADY HANDS", desc: "Lowers the top spin speed", max: 3, costs: [500, 1000, 2000] },
+  { k: "clock",  name: "LONG CLOCK",   desc: "+" + CLOCK_STEP + "s on every spin", max: 1, costs: [2000] },
+  { k: "mastery", name: "MASTERY", cur: "gems", gold: 3000, max: 1, costs: [3], minLvl: 20,
     desc: "Train your fighter's own edge",
     label: function () { return "MASTERY - " + allyBase().name; },
-    detail: function () { var b = allyBase(); return b.mastery ? b.mastery.note : "This fighter has nothing more to learn."; } }
+    detail: function () {
+      var b = allyBase();
+      if (foeLevel() < 20) return "Reach level 20 before he has anything left to teach you.";
+      return b.mastery ? b.mastery.note : "This fighter has nothing more to learn.";
+    } }
 ];
 var SPIN_SECONDS = 2.0;     // how long a single spin stays live, in seconds
 var GRIP_BONUS = 0.06;
@@ -142,7 +152,7 @@ var FOES = [
   { n: "NEU", lore: "Nobody has seen the face under the mask, and the mask has never stopped smiling. Turned up one winter, paid the entry in coins that were still warm.",         fav: "swipe",   skin: 0xf0d24a, shirt: 0x8ecff0, pants: 0x4f9c48, hair: 0xff79b8, mask: true },
   { n: "IRONJAW", lore: "Took a plank to the jaw in his first bout and won anyway. The jaw set crooked and the name stuck. He has never once ducked.",     fav: "normal",  skin: 0x9aa0a6, shirt: 0x54606e, pants: 0x2f3238, hair: 0x33383e },
   { n: "DEVIANA", lore: "Ran a card table two streets over until the table ran out of players. Counts your tells out loud while she waits for you to swing.",     fav: "taps",    skin: 0xc98d6f, shirt: 0x8e2b22, pants: 0x2b1f1f, hair: 0x241a2e, female: true },
-  { n: "THE WARDEN", lore: "Worked the night gate at the old block. Still locks the door behind him out of habit, and still expects you to be there in the morning.",  fav: "pattern", skin: 0x8e7ab5, shirt: 0x59357f, pants: 0x2c2140, hair: 0x1d1630 },
+  { n: "THE WARDEN", lore: "Worked the night gate at the old block. Still locks the door behind him out of habit, and still expects you to be there in the morning.",  fav: "nerve", skin: 0x8e7ab5, shirt: 0x59357f, pants: 0x2c2140, hair: 0x1d1630 },
   { n: "HUBERT", lore: "Old, quiet, and impossible to read - he has no habits left to punish. Been in the pit longer than the pit has had a name.",      fav: null,      skin: 0xd0b48a, shirt: 0x1f6f63, pants: 0x243231, hair: 0xe8e2d4 }
 ];
 /* ------------------------------------------------------------
@@ -160,10 +170,10 @@ var FOES = [
 var ALLIES = [
   { k: "kazuma", name: "KAZUMA", tag: "SPECIAL - FOUR SLAMS",
     desc: "Four slams in a row. Land all four white for double damage.",
-    hits: 4, mult: 1.5, procMul: 1, charge: 1.0, both: false,
+    hits: 4, mult: 1.5, procMul: 1, charge: 0.75, both: false,
     skin: 0xd8a06a, hair: 0x4a3628,
-    mastery: { mult: 1.75, atk: 1.25, cnt: 1.25, charge: 1.25, procMul: 1.25,
-    note: "Special x1.75, and slam, counter, charge and glove procs all x1.25." } },
+    mastery: { mult: 1.75, atk: 1.25, cnt: 1.25, charge: 1.0, procMul: 1.25,
+    note: "Special x1.75, charge back up to normal, and slam, counter and glove procs x1.25." } },
   { k: "twiz", name: "TWIZ", tag: "SPECIAL - DOUBLE SLAP",
     desc: "Two slams with both hands at x1.75 damage. Charges fast and procs gloves twice as often.",
     hits: 2, mult: 1.75, procMul: 2, charge: 1.5, both: true,
@@ -185,8 +195,8 @@ var ALLIES = [
     desc: "Three slams at x2.5. His arc is inverted: a wide white perfect band around a small gold core. Gold is safe - whiff a spin entirely and the machine takes a heart.",
     hits: 3, mult: 2.5, procMul: 1, charge: 1.0, both: false, risk: true, flip: true,
     skin: 0xd9b98a, hair: 0x2b2440,
-    mastery: { mult: 2.75, dodge: 0.25,
-    note: "Special x2.75, and a 25% chance the house lets a whiff go." } },
+    mastery: { mult: 2.75, curse: true,
+    note: "Special x2.75, and the finisher leaves him confused, burning or chilled for a turn." } },
   /* The Expeditioner barely swings - he waits. His own slam is feeble, but he
      punishes anything the other man throws. */
   { k: "expeditioner", name: "THE EXPEDITIONER", tag: "COUNTER PUNCHER",
@@ -194,7 +204,17 @@ var ALLIES = [
     hits: 4, mult: 1.25, procMul: 1, charge: 1.0, both: false, atk: 0.5, cnt: 2.0,
     skin: 0xc98f5e, hair: 0x6b5330,
     mastery: { cnt: 2.5,
-    note: "Counters at x2.5." } }
+    note: "Counters at x2.5." } },
+  /* Nobody knows who he is or where the pit found him. He fights stripped to
+     the waist with no arc to aim for - every hit inside the gold is the same
+     hit - and he does not counter, he only gets an arm up. */
+  { k: "unknown", name: "???", tag: "???",
+    desc: "???",
+    hits: 1, mult: 6.0, procMul: 0, charge: 1.0, both: false,
+    atk: 3.0, cnt: 0, bare: true, noWhite: true, spSpeed: 1.7,
+    skin: 0xb98a5e, hair: 0x141018, shorts: 0x2b2b33,
+    mastery: { atk: 3.5, mult: 8.75, charge: 1.25,
+    note: "???" } }
 ];
 var _adCache = null, _adKey = "";
 function allyBase() {
@@ -219,6 +239,7 @@ function allyDef() {
 /* Set from the chosen ally at load time, so it must be declared before
    applyOutfitLook() runs - see the dial palette further down. */
 var ARC_FLIP = false;
+var ARC_NOWHITE = false;
 
 /* ---- arena skins ----
    A map repaints the room: the floor check, the fog and background, the timber
@@ -264,6 +285,9 @@ var rndInt = function (a, b) { return Math.floor(a + Math.random() * (b - a + 1)
 var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
 var ease = function (t) { return 1 - Math.pow(1 - t, 3); };
 var pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
+/* local calendar day, so the ad chest comes back at midnight wherever you are */
+function today() { var d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+function adChestReady() { return RUN.adDay !== today(); }
 
 /* ============================================================
    EQUIPMENT
@@ -278,11 +302,11 @@ var DUPE_VALUE = { common: 100, normal: 150, rare: 300, epic: 800, legendary: 15
 
 var TIERS = ["common", "normal", "rare", "epic", "legendary"];
 var TIER = {
-  common:    { name: "COMMON",    color: "#9aa0a6", s10: [1, 1],  s20: [1, 2],   mult: [1.05, 1.10] },
-  normal:    { name: "NORMAL",    color: "#7fa24f", s10: [2, 3],  s20: [3, 6],   mult: [1.10, 1.20] },
-  rare:      { name: "RARE",      color: "#5a7cf0", s10: [3, 5],  s20: [7, 10],  mult: [1.20, 1.30] },
-  epic:      { name: "EPIC",      color: "#b06bf5", s10: [5, 7],  s20: [11, 16], mult: [1.30, 1.40] },
-  legendary: { name: "LEGENDARY", color: "#ffc244", s10: [7, 10], s20: [17, 20], mult: [1.40, 1.50] }
+  common:    { name: "COMMON",    color: "#9aa0a6", s10: [1, 1],  s20: [1, 2],   mult: [1.05, 1.10] , boot: [4, 6], cas: [8, 12] , bank: [5, 8] },
+  normal:    { name: "NORMAL",    color: "#7fa24f", s10: [2, 3],  s20: [3, 6],   mult: [1.10, 1.20] , boot: [7, 9], cas: [15, 20] , bank: [10, 15] },
+  rare:      { name: "RARE",      color: "#5a7cf0", s10: [3, 5],  s20: [7, 10],  mult: [1.20, 1.30] , boot: [10, 13], cas: [22, 30] , bank: [18, 25] },
+  epic:      { name: "EPIC",      color: "#b06bf5", s10: [5, 7],  s20: [11, 16], mult: [1.30, 1.40] , boot: [14, 17], cas: [34, 42] , bank: [30, 40] },
+  legendary: { name: "LEGENDARY", color: "#ffc244", s10: [7, 10], s20: [17, 20], mult: [1.40, 1.50] , boot: [18, 20], cas: [45, 50] , bank: [45, 50] }
 };
 
 /* Outfit effects only fire when you MISS your guard. */
@@ -293,9 +317,9 @@ var OUTFITS = [
   { t: "skirmisher", name: "SKIRMISH RAGS", stat: "evade", scale: "s20",
     shirt: 0x1f6f63, pants: 0x243231, hair: 0x3a2f22, trim: 0x14443d,
     eff: function (v) { return v + "% to evade a missed guard"; } },
-  { t: "bulwark",    name: "BULWARK PLATE", stat: "absorb", scale: "s10",
+  { t: "bulwark",    name: "BULWARK PLATE", stat: "absorb", scale: "bank",
     shirt: 0x66707d, pants: 0x2f3238, hair: 0x33383e, trim: 0x9aa6b4,
-    eff: function (v) { return v + "% to absorb a missed guard and bank " + ABSORB_STORE + " dmg"; } }
+    eff: function (v) { return "Absorb a missed guard and bank +" + v + "% on your next hit"; } }
 ];
 
 /* Glove effects only fire when you LAND a hit. */
@@ -304,12 +328,27 @@ var GLOVES = [
     eff: function (v) { return v + "% on hit to slow the next spins"; } },
   { t: "hot",   name: "HOT GLOVES",    stat: "burn",  scale: "s20", color: 0xe0453a, cuff: 0x7a1f18,
     eff: function (v) { return v + "% on hit to set him burning"; } },
+  { t: "spin",  name: "SPIN GLOVES",   stat: "confuse", scale: "s20", color: 0xc39bff, cuff: 0x53307f,
+    eff: function (v) { return v + "% on hit to leave him confused - he misses his next swing"; } },
   { t: "plain", name: "KEVIN GLOVES", stat: "power", scale: "mult", color: 0xd8b06a, cuff: 0x6b4a22,
     eff: function (v) { return "x" + v.toFixed(2) + " attack damage (no white bonus)"; } }
 ];
 
+/* Boots are the third slot. They never fire on a proc of their own - each one
+   just bends a number you already have. */
+var BOOTS = [
+  { t: "twiz",    name: "TWIZ TRAVEL BOOTS", stat: "chargeup", scale: "boot",
+    col: 0x9a3b2f, trim: 0xe8c49a,
+    eff: function (v) { return "+" + v + "% special charge"; } },
+  { t: "exped",   name: "EXPEDITIONER BOOTS", stat: "counterup", scale: "boot",
+    col: 0x6b5330, trim: 0xc98f5e,
+    eff: function (v) { return "+" + v + "% counter damage"; } },
+  { t: "casino",  name: "CASINO BOOTS", stat: "luck", scale: "cas",
+    col: 0x1f7a4d, trim: 0xffd166,
+    eff: function (v) { return "+" + v + "% to every chance-based effect"; } }
+];
 function defOf(kind, type) {
-  var list = kind === "outfit" ? OUTFITS : GLOVES;
+  var list = kind === "outfit" ? OUTFITS : (kind === "boots" ? BOOTS : GLOVES);
   for (var i = 0; i < list.length; i++) if (list[i].t === type) return list[i];
   return null;
 }
@@ -332,22 +371,43 @@ function itemEff(it) { return defOf(it.kind, it.type).eff(it.val); }
 ============================================================ */
 var SAVE_KEY = "plankslam.run.v2";
 var RUN = {
-  coins: 0, gems: 0, streak: 0, best: 0, diff: 1, ally: "kazuma", map: "pit", hp: null,
-  shield: 0, surge: 0, soften: 0, boon: false,
-  up: { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0 },
+  coins: 0, gems: 0, streak: 0, best: 0, diff: 0, ally: "kazuma", map: "pit", hp: null,
+  shield: 0, surge: 0, soften: 0, boon: false, adDay: "",
+  up: { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0, steady: 0, clock: 0 },
   fx: true,                     /* particles, screen shake and the hit flash */
-  music: true, sfx: true,
+  music: true, sfx: true, perf: false,
   inv: [],
-  equip: { outfit: null, gloves: null }
+  equip: { outfit: null, gloves: null, boots: null }
 };
 
-/* Testing wardrobe: every outfit and glove, in every tier, at max roll. */
+/* Testing wardrobe: every outfit, glove and boot, in every tier, at max roll. */
+var SLOT_DEFS = { outfit: null, gloves: null, boots: null };   /* filled below */
+function eachGearDef(fn) {
+  OUTFITS.forEach(function (d) { fn("outfit", d); });
+  GLOVES.forEach(function (d) { fn("gloves", d); });
+  BOOTS.forEach(function (d) { fn("boots", d); });
+}
+/* Adds anything the player does not already own, at max roll, and fills any
+   empty slot. Run on every load, so a save made before a slot existed - boots,
+   say - picks the new kit up instead of being stuck without it. */
+function topUpWardrobe() {
+  RUN.inv = RUN.inv || [];
+  var have = {};
+  RUN.inv.forEach(function (i) { have[i.kind + ":" + i.type + ":" + i.tier] = true; });
+  eachGearDef(function (kind, def) {
+    TIERS.forEach(function (t) {
+      if (!have[kind + ":" + def.t + ":" + t]) RUN.inv.push(makeItem(kind, def.t, t, true));
+    });
+  });
+  ["outfit", "gloves", "boots"].forEach(function (k) {
+    if (equipped(k)) return;
+    var first = RUN.inv.filter(function (i) { return i.kind === k; })[0];
+    if (first) RUN.equip[k] = first.uid;
+  });
+}
 function stockWardrobe() {
   RUN.inv = [];
-  OUTFITS.forEach(function (o) { TIERS.forEach(function (t) { RUN.inv.push(makeItem("outfit", o.t, t, true)); }); });
-  GLOVES.forEach(function (g) { TIERS.forEach(function (t) { RUN.inv.push(makeItem("gloves", g.t, t, true)); }); });
-  RUN.equip.outfit = RUN.inv[0].uid;
-  RUN.equip.gloves = RUN.inv.filter(function (i) { return i.kind === "gloves"; })[0].uid;
+  topUpWardrobe();
 }
 function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUN)); } catch (e) {}
@@ -360,24 +420,28 @@ function load() {
     if (!d || !d.inv || !d.inv.length) return false;
     RUN.coins = d.coins || 0; RUN.gems = d.gems || 0;
     RUN.streak = d.streak || 0; RUN.best = d.best || 0;
-    RUN.diff = typeof d.diff === "number" ? d.diff : 1;
+    RUN.diff = typeof d.diff === "number" ? d.diff : 0;
     RUN.ally = d.ally || "kazuma";
     if (RUN.ally === "trist") RUN.ally = "kevin";     /* v1.3: Trist became Kevin */
     RUN.map = d.map || "pit";
     RUN.fx = d.fx !== false;                         /* default on */
     RUN.music = d.music !== false;
     RUN.sfx = d.sfx !== false;
+    RUN.perf = d.perf === true;
+    RUN.adDay = d.adDay || "";
     RUN.hp = (typeof d.hp === "number") ? d.hp : null;
     RUN.shield = d.shield || 0; RUN.surge = d.surge || 0;
     RUN.soften = d.soften || 0; RUN.boon = !!d.boon;
     RUN.up = { hearts: (d.up && d.up.hearts) || 0, grip: (d.up && d.up.grip) || 0,
                power: (d.up && d.up.power) || 0, focus: (d.up && d.up.focus) || 0,
-               mastery: (d.up && d.up.mastery) || 0 };
+               mastery: (d.up && d.up.mastery) || 0,
+               steady: (d.up && d.up.steady) || 0, clock: (d.up && d.up.clock) || 0 };
     RUN.inv = d.inv; RUN.equip = d.equip || { outfit: null, gloves: null };
     return true;
   } catch (e) { return false; }
 }
 if (!load()) stockWardrobe();
+topUpWardrobe(); save();  /* every fighter owns the full kit - dev build */
 
 var youMaxHP = function () { return Math.min(HP_CAP, HP_BASE + RUN.up.hearts); };
 
@@ -433,32 +497,39 @@ function blip(f, d, t, v, to) {
 var MUSIC = (function () {
   var BASS = [110, 110, 165, 110, 146.8, 146.8, 110, 130.8];
   var LEAD = [440, 0, 523.3, 0, 659.3, 0, 587.3, 0, 523.3, 0, 440, 0, 392, 0, 349.2, 0];
-  var STEP = 0.28, timer = null, step = 0, gain = null, on = false;
+  var STEP = 0.28, timer = null, step = 0, gain = null, on = false, nextT = 0;
 
-  function voice(f, dur, type, vol) {
+  /* Notes are scheduled a beat ahead against the audio clock rather than played
+     the instant a timer fires. The timer now wakes 4x a second instead of once
+     per note, the graph is built in batches, and the timing is sample-exact
+     even while a fight is busy. */
+  function voice(f, dur, type, vol, when) {
     var a = ac(); if (!a || !f) return;
     var o = a.createOscillator(), g = a.createGain();
-    o.type = type; o.frequency.setValueAtTime(f, a.currentTime);
-    g.gain.setValueAtTime(0.0001, a.currentTime);
-    g.gain.exponentialRampToValueAtTime(vol, a.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
-    o.connect(g); g.connect(gain); o.start(); o.stop(a.currentTime + dur + 0.02);
+    o.type = type; o.frequency.setValueAtTime(f, when);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(vol, when + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    o.connect(g); g.connect(gain); o.start(when); o.stop(when + dur + 0.02);
+  }
+  function emit(n, when) {
+    if (n % 2 === 0) voice(BASS[(n / 2) % BASS.length], STEP * 1.7, "triangle", 0.10, when);
+    var l = LEAD[n % LEAD.length];
+    if (l) voice(l, STEP * 0.8, "square", 0.028, when);
+    if (n % 8 === 4) voice(80, 0.11, "sawtooth", 0.05, when);   /* soft pulse */
   }
   function tick() {
-    if (!on) return;
-    if (step % 2 === 0) voice(BASS[(step / 2) % BASS.length], STEP * 1.7, "triangle", 0.10);
-    var l = LEAD[step % LEAD.length];
-    if (l) voice(l, STEP * 0.8, "square", 0.028);
-    if (step % 8 === 4) voice(80, 0.11, "sawtooth", 0.05);      /* soft pulse */
-    step++;
+    var a = ac(); if (!a || !on) return;
+    if (nextT < a.currentTime) nextT = a.currentTime + 0.05;
+    while (nextT < a.currentTime + 0.6) { emit(step++, nextT); nextT += STEP; }
   }
   return {
     start: function () {
       if (on || RUN.music === false) return;
       var a = ac(); if (!a) return;
       if (!gain) { gain = a.createGain(); gain.gain.value = 0.85; gain.connect(a.destination); }
-      on = true; step = 0;
-      timer = setInterval(tick, STEP * 1000);
+      on = true; step = 0; nextT = a.currentTime + 0.06;
+      timer = setInterval(tick, 250);
       tick();
     },
     stop: function () {
@@ -505,8 +576,18 @@ var camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
 var CAM_BASE = new THREE.Vector3(0.9, 4.35, 8.0), CAM_LOOK = new THREE.Vector3(0, 2.05, -0.1);
 camera.position.copy(CAM_BASE); camera.lookAt(CAM_LOOK);
 var renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+function pixelCap() { return RUN.perf ? 1.0 : 1.5; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelCap()));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = true;
+/* Applied on load and whenever the option is toggled. */
+function applyPerf() {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelCap()));
+  renderer.shadowMap.enabled = !RUN.perf;
+  key.castShadow = !RUN.perf;
+  scene.traverse(function (o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+  resize();
+}
 document.getElementById("stage").appendChild(renderer.domElement);
 function resize() { var w = innerWidth, h = innerHeight; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); }
 addEventListener("resize", resize); resize();
@@ -519,6 +600,23 @@ scene.add(key);
 var torchLight = new THREE.PointLight(0xffc244, 1.5, 9, 2); torchLight.position.set(0, 3.6, 1.0); scene.add(torchLight);
 var rim = new THREE.DirectionalLight(0x5f7cff, 0.4); rim.position.set(-6, 3, -6); scene.add(rim);
 
+/* Every particle used to allocate its own BoxGeometry and material, which
+   means a GPU buffer upload per speck - 14 on each hit, 46 on a special. They
+   all share one unit cube now, scaled per particle, and one material per
+   colour. Nothing is allocated in the hot path any more. */
+var CUBE = new THREE.BoxGeometry(1, 1, 1);
+var _dmat = {};
+function debrisMat(hex) {
+  var m = _dmat[hex];
+  if (!m) m = _dmat[hex] = new THREE.MeshLambertMaterial({ color: hex });
+  return m;
+}
+var _mmat = {};
+function moteMat(hex) {
+  var m = _mmat[hex];
+  if (!m) m = _mmat[hex] = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: .7 });
+  return m;
+}
 function box(w, h, d, color) {
   var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: color }));
   m.castShadow = true; m.receiveShadow = true; return m;
@@ -649,6 +747,8 @@ function makeGear(f) {
   gear.sash      = piece(8.6, 2.4, 4.5, 0xffc244, f.group,  0, 15,   0);
   gear.cuffL     = piece(4.7, 1.8, 4.7, 0x6b4a22, f.armL,   0, -7.9, 0);
   gear.cuffR     = piece(4.7, 1.8, 4.7, 0x6b4a22, f.armR,   0, -7.9, 0);
+  gear.bootL     = piece(4.6, 3.4, 5.4, 0x6b5330, f.group, -1.8, 1.5, 0.3);
+  gear.bootR     = piece(4.6, 3.4, 5.4, 0x6b5330, f.group,  1.8, 1.5, 0.3);
   return gear;
 }
 var youGear = makeGear(you);
@@ -686,9 +786,9 @@ var outlineShells = (function () {
 var auraFx = null, auraT = 0;
 function auraTier() {
   var best = -1;
-  ["outfit", "gloves"].forEach(function (k) {
+  ["outfit", "gloves", "boots"].forEach(function (k) {
     var it = equipped(k);
-    if (it) { var i = TIERS.indexOf(it.tier); if (i > best) best = i; }
+    if (it && allyAllows(k, it)) { var i = TIERS.indexOf(it.tier); if (i > best) best = i; }
   });
   return best >= 0 ? TIERS[best] : null;
 }
@@ -713,8 +813,8 @@ function applyAura() {
 function mote() {
   if (!auraFx || !RUN.fx) return;
   var sz = rnd(auraFx.size[0], auraFx.size[1]);
-  var m = new THREE.Mesh(new THREE.BoxGeometry(sz, sz, sz),
-    new THREE.MeshBasicMaterial({ color: auraFx.color, transparent: true, opacity: .7 }));
+  var m = new THREE.Mesh(CUBE, moteMat(auraFx.color));
+  m.scale.set(sz, sz, sz); m.userData.sz = sz; m.userData.shared = true;
   m.position.set(you.group.position.x + rnd(-.35, .35), rnd(.5, 2.2), rnd(-.3, .3));
   m.userData.v = new THREE.Vector3(rnd(-.12, .12), auraFx.rise * rnd(.7, 1.2), rnd(-.08, .08));
   m.userData.rv = new THREE.Vector3(0, rnd(-1.6, 1.6), 0);
@@ -726,8 +826,10 @@ function mote() {
 /* Paint and show the equipped kit. Runs after the ally look, because the ally
    owns skin - and the hands are skin until a glove covers them. */
 function applyGearLook() {
+  var A = allyDef();
   var o = equipped("outfit"), od = o ? defOf("outfit", o.type) : OUTFITS[0];
   var gl = equipped("gloves"), gd = gl ? defOf("gloves", gl.type) : null;
+  if (A.bare) { od = { t: "-", trim: 0x000000, shirt: A.skin }; gd = null; }
   var heavy = od.t === "bulwark";
   [youGear.chest, youGear.pauldronL, youGear.pauldronR].forEach(function (p) {
     p.visible = heavy; p.material.color.setHex(od.trim);
@@ -741,6 +843,13 @@ function applyGearLook() {
     youGear.cuffL.material.color.setHex(gd.cuff);
     youGear.cuffR.material.color.setHex(gd.cuff);
     you.handParts.forEach(function (p) { p.material.color.setHex(gd.color); });
+  }
+  var bt = equipped("boots");
+  var bd = (bt && allyAllows("boots", bt)) ? defOf("boots", bt.type) : null;
+  youGear.bootL.visible = youGear.bootR.visible = !!bd;
+  if (bd) {
+    youGear.bootL.material.color.setHex(bd.col);
+    youGear.bootR.material.color.setHex(bd.col);
   }
   applyAura();
 }
@@ -760,8 +869,13 @@ function applyOutfitLook() {
 function applyAllyLook() {
   var a = allyDef();
   ARC_FLIP = !!a.flip;
+  ARC_NOWHITE = !!a.noWhite;
   you.skinParts.forEach(function (p) { p.material.color.setHex(a.skin); });
   you.hairParts.forEach(function (p) { p.material.color.setHex(a.hair); });
+  if (a.bare) {                       /* no shirt at all, and a pair of shorts */
+    you.shirtParts.forEach(function (p) { p.material.color.setHex(a.skin); });
+    you.pantsParts.forEach(function (p) { p.material.color.setHex(a.shorts); });
+  }
   you.both = !!a.both;
 }
 applyOutfitLook();
@@ -781,7 +895,8 @@ function burst(x, y, z, color) {
   if (!RUN.fx) return;
   for (var i = 0; i < 14; i++) {
     var s = rnd(.05, .12);
-    var m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshLambertMaterial({ color: color }));
+    var m = new THREE.Mesh(CUBE, debrisMat(color));
+    m.scale.set(s, s, s); m.userData.shared = true;
     m.position.set(x + rnd(-.2, .2), y, z + rnd(-.25, .25));
     m.userData.v = new THREE.Vector3(rnd(-2.4, 2.4), rnd(2.2, 5.2), rnd(-2.4, 2.4));
     m.userData.rv = new THREE.Vector3(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8));
@@ -803,7 +918,8 @@ function specialBurst(x, y, z) {
     a = (i / 44) * Math.PI * 2 + rnd(-0.12, 0.12);
     sp = rnd(3.0, 6.6);
     s = rnd(.06, .17);
-    m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshLambertMaterial({ color: cols[i % cols.length] }));
+    m = new THREE.Mesh(CUBE, debrisMat(cols[i % cols.length]));
+    m.scale.set(s, s, s); m.userData.shared = true;
     m.position.set(x + rnd(-.15, .15), y + rnd(-.2, .2), z + rnd(-.15, .15));
     m.userData.v = new THREE.Vector3(Math.cos(a) * sp, rnd(1.4, 4.2), Math.sin(a) * sp * 0.55);
     m.userData.rv = new THREE.Vector3(rnd(-15, 15), rnd(-15, 15), rnd(-15, 15));
@@ -812,7 +928,8 @@ function specialBurst(x, y, z) {
   }
   for (i = 0; i < 18; i++) {                       /* fountain straight up */
     s = rnd(.05, .12);
-    m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshLambertMaterial({ color: cols[i % 2] }));
+    m = new THREE.Mesh(CUBE, debrisMat(cols[i % 2]));
+    m.scale.set(s, s, s); m.userData.shared = true;
     m.position.set(x + rnd(-.3, .3), y, z + rnd(-.3, .3));
     m.userData.v = new THREE.Vector3(rnd(-1.2, 1.2), rnd(5.5, 8.5), rnd(-1.2, 1.2));
     m.userData.rv = new THREE.Vector3(rnd(-12, 12), rnd(-12, 12), rnd(-12, 12));
@@ -831,11 +948,16 @@ function stepDebris(dt) {
   }
   for (var i = debris.length - 1; i >= 0; i--) {
     var d = debris[i]; d.userData.life -= dt;
-    if (d.userData.life <= 0) { scene.remove(d); d.geometry.dispose(); d.material.dispose(); debris.splice(i, 1); continue; }
+    if (d.userData.life <= 0) {
+      scene.remove(d);
+      if (!d.userData.shared) { d.geometry.dispose(); d.material.dispose(); }
+      debris.splice(i, 1); continue;
+    }
     if (d.userData.mote) {                       /* aura motes float, they do not fall */
       d.position.addScaledVector(d.userData.v, dt);
       d.rotation.y += d.userData.rv.y * dt;
-      d.material.opacity = .7 * clamp(d.userData.life / d.userData.life0, 0, 1);
+      var k = clamp(d.userData.life / d.userData.life0, 0, 1);
+      d.scale.setScalar(d.userData.sz * (0.35 + 0.65 * k));   /* fade by shrinking */
       continue;
     }
     d.userData.v.y -= 13 * dt; d.position.addScaledVector(d.userData.v, dt);
@@ -948,6 +1070,7 @@ var PIP_LOOK = [
    The dial and judge() share this, so what you see is always what you score. */
 function bandAt(d, half, ph) {
   if (d > half) return 0;
+  if (ARC_NOWHITE) return 1;          /* the ??? has no core - it is all gold */
   var core = d <= ph;
   return (ARC_FLIP ? !core : core) ? 2 : 1;
 }
@@ -1024,6 +1147,7 @@ function renderFoeHP() {
   var tags = [];
   if (G.burn > 0) tags.push('<span class="burn-tag">BURNING</span>');
   if (G.chill > 0) tags.push('<span class="chill-tag">CHILLED ' + G.chill + "</span>");
+  if (G.confuse > 0) tags.push('<span class="confuse-tag">CONFUSED</span>');
   statusEl.innerHTML = tags.join(" ");
 }
 function renderSpecial() {
@@ -1038,9 +1162,29 @@ function renderSpecial() {
   spBtn.classList.toggle("on", full && yours);
   spLabel.textContent = full ? (yours ? "SPECIAL READY" : "READY NEXT TURN") : "SPECIAL";
 }
+/* boot helpers - each returns a plain multiplier so the call sites stay tidy */
+/* The ??? fights bare. No outfit at all, and nothing that pays out on a
+   chance, since he procs nothing - the only kit that reaches him is the flat
+   power of Kevin Gloves and the Expeditioner boots. */
+function allyAllows(kind, it) {
+  var a = allyDef();
+  if (!a.bare || !it) return true;
+  if (kind === "outfit") return false;
+  if (kind === "gloves") return it.type === "plain";
+  if (kind === "boots") return it.type === "exped";
+  return true;
+}
+function bootVal(stat) {
+  var b = equipped("boots");
+  return (b && b.stat === stat && allyAllows("boots", b)) ? b.val : 0;
+}
+var chargeBoot  = function () { return 1 + bootVal("chargeup") / 100; };
+var counterBoot = function () { return 1 + bootVal("counterup") / 100; };
+var luckBoot    = function () { return 1 + bootVal("luck") / 100; };
+
 function addCharge(n) {
   var was = G.special;
-  G.special = clamp(G.special + n * allyDef().charge * (1 + SURGE_STEP * RUN.surge), 0, 100);
+  G.special = clamp(G.special + n * allyDef().charge * chargeBoot() * (1 + SURGE_STEP * RUN.surge), 0, 100);
   if (G.special >= 100 && was < 100) SFX.charge();
   renderSpecial();
 }
@@ -1082,17 +1226,17 @@ function pop(node, idx) {
    Timing runs off the frame loop's dt, which means pausing freezes a QTE
    mid-challenge for free.
 ============================================================ */
-var QTE_TYPES = ["circle", "line", "swipe", "pattern", "normal", "taps"];
+var QTE_TYPES = ["circle", "line", "swipe", "nerve", "normal", "taps"];
 var QTE_FAV_BONUS = 10;                 /* percentage points, per the spec */
 var QTE_LABEL = {
   circle: "RING SYNC", line: "LINE TEST", swipe: "SHAKE HIM OFF",
-  pattern: "TRACE THE LOCK", normal: "THE DIAL", taps: "HAMMER IT"
+  nerve: "HOLD YOUR NERVE", normal: "THE DIAL", taps: "HAMMER IT"
 };
 var QTE_HINT = {
   circle: "TAP WHEN THE RING MEETS THE GOLD",
   line: "TAP INSIDE THE GOLD - WHITE CORE COUNTERS",
   swipe: "SWIPE THAT WAY, FAST",
-  pattern: "TAP OR DRAG THE DOTS IN ORDER",
+  nerve: "DO WHAT IT SAYS UNTIL THE BAR EMPTIES",
   taps: "TAP AS FAST AS YOU CAN",
   normal: "THE ORDINARY DIAL - TAP INSIDE THE GOLD"
 };
@@ -1264,61 +1408,47 @@ var QTE = (function () {
   };
 
   /* TRACE THE LOCK - drag through the lit dots in order */
-  BUILD.pattern = function (P) {
-    var svg = canvas(100, 100), pts = [], i, j;
-    for (j = 0; j < 3; j++) for (i = 0; i < 3; i++) pts.push({ x: 14 + i * 36, y: 14 + j * 36 });
-    var order = [], pool = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-    for (i = 0; i < P.nodes; i++) order.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-    /* the route to follow, drawn faintly */
-    var dAttr = order.map(function (n, k) { return (k ? "L" : "M") + pts[n].x + " " + pts[n].y; }).join(" ");
-    svg.appendChild(el("path", { d: dAttr, fill: "none", stroke: "#ffc244", "stroke-width": 2, opacity: ".3",
-      "stroke-linecap": "round", "stroke-linejoin": "round", "stroke-dasharray": "5 4" }));
-    var trail = el("path", { d: "", fill: "none", stroke: "#f2ede1", "stroke-width": 3,
-      "stroke-linecap": "round", "stroke-linejoin": "round" });
-    svg.appendChild(trail);
-    var dots = pts.map(function (p) {
-      var c = el("circle", { cx: p.x, cy: p.y, r: 9, fill: "#3a2f22" });
-      svg.appendChild(c); return c;
+  /* HOLD YOUR NERVE - he tells you to hold on or to keep your hands off, and
+     you obey until the bar empties. Obey the whole way and you counter. Break
+     it early and he lands one. Break it in the last moments and you only block:
+     you flinched, but late enough to get an arm up. */
+  BUILD.nerve = function (P) {
+    var hold = Math.random() < 0.5;
+    var hue = hold ? "#ffc244" : "#8fd8ff";
+    var svg = canvas(100, 100);
+    svg.appendChild(el("circle", { cx: 50, cy: 50, r: 34, fill: "none",
+      stroke: hue, "stroke-width": 5, opacity: ".22" }));
+    var C = 2 * Math.PI * 34;
+    var arc = el("circle", { cx: 50, cy: 50, r: 34, fill: "none", stroke: hue,
+      "stroke-width": 5, "stroke-linecap": "round", transform: "rotate(-90 50 50)",
+      "stroke-dasharray": C });
+    svg.appendChild(arc);
+    [[hold ? "HOLD" : "HANDS", 47], [hold ? "IT" : "OFF", 63]].forEach(function (w) {
+      var t = el("text", { x: 50, y: w[1], "text-anchor": "middle", "font-size": "13",
+        fill: hue, "font-family": "Silkscreen, monospace" });
+      t.textContent = w[0]; svg.appendChild(t);
     });
-    order.forEach(function (n, k) {
-      dots[n].setAttribute("fill", "#6b4a22");
-      var lab = el("text", { x: pts[n].x, y: pts[n].y + 4, "text-anchor": "middle",
-        "font-size": "10", fill: "#ffc244", "font-family": "Silkscreen, monospace" });
-      lab.textContent = (k + 1);
-      svg.appendChild(lab);
-    });
-    var t = 0, at = 0, dragging = false, last = null;
-    function settle() {
-      finish(at >= order.length ? "white" : at >= Math.ceil(order.length * 0.6) ? "yellow" : "miss");
-    }
-    function claim(x, y) {
-      if (at >= order.length) return;
-      var n = order[at], q = pts[n];
-      if (Math.sqrt((x - q.x) * (x - q.x) + (y - q.y) * (y - q.y)) > P.grab) return;
-      dots[n].setAttribute("fill", "#ffc244");
-      at++;
-      SFX.tick();
-      trail.setAttribute("d", order.slice(0, at).map(function (m, k) {
-        return (k ? "L" : "M") + pts[m].x + " " + pts[m].y;
-      }).join(" "));
-      if (at >= order.length) finish("white");
-    }
+
+    var t = 0, held = false, broke = false;
+    function late() { return t >= P.limit * (1 - P.grace); }
+    function slip() { broke = true; finish(late() ? "yellow" : "miss"); }
     return {
-      step: function (dt) { t += dt; P.bar(1 - t / P.limit); if (t >= P.limit) settle(); },
-      down: function (e) { dragging = true; last = viewPt(e); claim(last.x, last.y); },
-      move: function (e) {
-        if (!dragging || at >= order.length) return;
-        var v = viewPt(e), from = last || v;
-        var dx = v.x - from.x, dy = v.y - from.y;
-        /* sample every ~3 viewBox units along the stroke so nothing is skipped */
-        var steps = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 3));
-        for (var k = 1; k <= steps && at < order.length; k++) {
-          claim(from.x + dx * k / steps, from.y + dy * k / steps);
-        }
-        last = v;
+      step: function (dt) {
+        t += dt;
+        var left = 1 - t / P.limit;
+        arc.setAttribute("stroke-dashoffset", C * (1 - Math.max(0, left)));
+        P.bar(left);
+        if (broke) return;
+        if (hold && !held && t > 0.4) { slip(); return; }   /* told to hold, never did */
+        if (t >= P.limit) finish("white");                  /* obeyed all the way */
       },
-      up: function () { dragging = false; last = null; },
-      cancel: function () { dragging = false; last = null; }
+      down: function () {
+        if (broke) return;
+        if (hold) { held = true; SFX.tick(); return; }
+        slip();                                             /* hands off, and you touched */
+      },
+      up:     function () { if (!broke && hold && held) { held = false; slip(); } },
+      cancel: function () { if (!broke && hold && held) { held = false; slip(); } }
     };
   };
 
@@ -1372,12 +1502,9 @@ var QTE = (function () {
       base.limit = 1.05 - 0.42 * hard;         /* react and commit, no dithering */
       base.fast = 0.24 - 0.10 * hard;          /* only a genuine flick counts */
       base.dist = 64 + 26 * hard;              /* and it has to travel further */
-    } else if (key === "pattern") {
-      base.limit = 4.2 - 1.7 * hard;
-      /* a fifth and then a sixth dot late on - the drag interpolates between
-         pointer samples, so a longer route stays fair on a thumb */
-      base.nodes = 4 + (hard > 0.5 ? 1 : 0) + (hard > 0.95 ? 1 : 0);
-      base.grab = 30 - 7 * hard;   /* still generous: only the NEXT dot is tested */
+    } else if (key === "nerve") {
+      base.limit = 1.6 + 0.9 * hard;      /* longer to sit still, or to hold on */
+      base.grace = 0.30 - 0.15 * hard;    /* the late window that saves you */
     } else if (key === "taps") {
       base.limit = 2.2 - 0.35 * hard;          /* the window closes too */
       base.taps = Math.round(7 + 5.5 * hard);
@@ -1430,7 +1557,7 @@ var G = {
   foeFav: null, qteKind: null, softened: 0, countT: 0, countShown: 0,
   major: false, debuff: null,
   offerT: 0, offered: false,
-  banked: 0, burn: 0, chill: 0,
+  banked: 0, bankPct: 0, burn: 0, chill: 0, confuse: 0,
   hits: 0, perfects: 0, misses: 0, blocks: 0, counters: 0, dealt: 0,
   shake: 0, resolveT: 0, resolveLen: 1.0, after: null
 };
@@ -1486,7 +1613,7 @@ function beginBattle() {
     G.foeHP = Math.max(1, Math.round(G.foeMax * (1 - RUN.soften)));
     RUN.soften = 0; save();
   }
-  G.round = 0; G.special = 0; G.banked = 0; G.burn = 0; G.chill = 0; G.offered = false;
+  G.round = 0; G.special = 0; G.banked = 0; G.bankPct = 0; G.burn = 0; G.chill = 0; G.confuse = 0; G.offered = false;
   G.hits = G.perfects = G.misses = G.blocks = G.counters = G.dealt = 0;
   you.group.rotation.set(0, Math.PI / 2, 0); you.group.position.set(-2.05, 0, 0);
   tintHurt(you, 0); setAnim(you, "idle"); setAnim(foe, "idle");
@@ -1508,7 +1635,8 @@ function spinSpeed(base) {
 function newSpin(speedMul, zoneMul) {
   var C = curveFor(G.lvl), lvlF = 1 + (G.lvl - 1) * 0.055;
   var r = Math.min(G.round, ROUND_RAMP_CAP);      /* stop ramping past the cap */
-  var raw = Math.min(900, (270 + (r - 1) * RAMP_SPEED) * C.speed * lvlF * (speedMul || 1));
+  var cap = SPEED_CAP - RUN.up.steady * STEADY_STEP;
+  var raw = Math.min(cap, (270 + (r - 1) * RAMP_SPEED) * C.speed * lvlF * (speedMul || 1));
   if (G.debuff === "rushed") raw *= 1.18;
   G.speed = spinSpeed(raw);
   var zBase = Math.max(ARC_FLOOR, ARC_BASE - (r - 1) * ARC_SHRINK);
@@ -1517,7 +1645,7 @@ function newSpin(speedMul, zoneMul) {
   G.perfect = clamp(G.zone * 0.32 * (1 + RUN.up.focus * FOCUS_BONUS), 5, G.zone * 0.75);
   G.zoneCenter = rnd(0, 360);
   G.marker = (G.zoneCenter + 180 + rnd(-45, 45) + 360) % 360;
-  G.spinT = 0; G.spinLimit = SPIN_SECONDS;
+  G.spinT = 0; G.spinLimit = SPIN_SECONDS + RUN.up.clock * CLOCK_STEP;
 }
 
 /* Boss fights open on 3..2..1 so the first swing is not a surprise. */
@@ -1586,6 +1714,21 @@ function beginAttackSpin() {
   renderSpecial();
 }
 function startDefend() {
+  if (G.confuse > 0) {                    /* spun round - his swing goes nowhere */
+    G.confuse--;
+    renderFoeHP();
+    setAnim(foe, "windup");
+    phaseEl.className = "def"; phaseEl.textContent = "HE IS CONFUSED - THE SWING GOES WIDE";
+    $("hint").textContent = "";
+    G.phase = "wait";
+    setTimeout(function () {
+      setAnim(foe, "slam"); SFX.whiff();
+      callout("HE MISSES", "#c39bff");
+      addCharge(CHARGE.block);
+    }, 260);
+    pause(1.15, afterDefend);
+    return;
+  }
   var key = rollQTE(G.foeFav);
   G.qteKind = key;
   setAnim(foe, "windup"); setAnim(you, "guard");
@@ -1610,7 +1753,7 @@ function startDefend() {
   });
 }
 function startSpecialSpin() {
-  newSpin(1.15, 0.9);
+  newSpin(1.15 * (allyDef().spSpeed || 1), 0.9);
   G.phase = "special";
   hubR.textContent = (G.spHits - G.spLeft + 1) + "/" + G.spHits;
   hubL.textContent = "SPECIAL";
@@ -1631,18 +1774,20 @@ function gloveProc(isWhite) {
   var g = equipped("gloves");
   if (!g) return null;
   if (g.stat === "power") return null;                        // flat power, handled in damage
-  var chance = (g.val + (isWhite ? WHITE_PROC_BONUS : 0)) / 100 * allyDef().procMul;
+  if (!allyAllows("gloves", g)) return null;
+  var chance = (g.val + (isWhite ? WHITE_PROC_BONUS : 0)) / 100 * allyDef().procMul * luckBoot();
   return Math.random() < chance ? g.stat : null;
 }
 /* Only the special used to scale per ally. The Expeditioner needs the plain
    slam and the counter scaled too; everyone else leaves these at 1. */
 var atkMul = function () { var a = allyDef(); return a.atk || 1; };
-var cntMul = function () { var a = allyDef(); return a.cnt || 1; };
+var cntMul = function () { var a = allyDef(); return (a.cnt === 0 ? 0 : (a.cnt || 1)) * counterBoot(); };
 function attackDamage(isWhite) {
   var d = ((isWhite ? DMG.white : DMG.yellow) + powerBonus()) * powerFor(G.lvl) * atkMul();
   var g = equipped("gloves");
-  if (g && g.stat === "power") d *= g.val;
+  if (g && g.stat === "power" && allyAllows("gloves", g)) d *= g.val;
   if (G.banked > 0) { d += G.banked * (isWhite ? ABSORB_WHITE : 1); G.banked = 0; }
+  if (G.bankPct > 0) { d *= 1 + G.bankPct / 100; G.bankPct = 0; }   /* spent on this swing */
   return Math.round(d);
 }
 function dealToFoe(amount, color, tag) {
@@ -1681,6 +1826,10 @@ function loseHeart() {
 
 /* ---- resolve: your attack ---- */
 function resolveAttack(kind) {
+  if (kind === "miss" && G.bankPct > 0) {      /* nothing landed - the bank is gone */
+    G.bankPct = 0;
+    callout("BANK LOST", "#8d8397");
+  }
   var white = kind === "white";
   if (kind === "miss") {
     G.misses++;
@@ -1702,6 +1851,7 @@ function resolveAttack(kind) {
     dealToFoe(dmg, white ? "#ffc244" : "#f2ede1", "");
     if (proc === "chill") { G.chill = CHILL_SPINS; callout("CHILLED", "#8fd8ff"); renderFoeHP(); }
     else if (proc === "burn") { G.burn = BURN_TURNS; callout("BURNING", "#ff9a3c"); renderFoeHP(); }
+    else if (proc === "confuse") { G.confuse = 1; callout("CONFUSED", "#c39bff"); renderFoeHP(); }
     else callout(white ? "PERFECT SLAM" : "HIT", white ? "#ffc244" : "#f2ede1");
   }, 150);
   pause(1.05, afterAttack);
@@ -1714,6 +1864,9 @@ function afterAttack() {
 
 /* ---- resolve: his swing ---- */
 function resolveDefend(kind) {
+  /* a fighter with no counter gets an arm up instead - a clean read still
+     saves him, it just never turns into a punch back */
+  if (kind === "white" && allyDef().cnt === 0) kind = "yellow";
   burnTick();
   if (G.foeHP <= 0) { pause(0.7, function () { finish(true); }); return; }
 
@@ -1742,8 +1895,9 @@ function resolveDefend(kind) {
 
   /* guard missed - outfit gets its shot */
   var o = equipped("outfit");
+  if (!allyAllows("outfit", o)) o = null;
   var saved = null;
-  if (o && Math.random() < o.val / 100) saved = o.stat;
+  if (o && Math.random() < o.val / 100 * luckBoot()) saved = o.stat;
   setTimeout(function () {
     if (saved === "counter") {
       G.counters++; addCharge(CHARGE.counter);
@@ -1754,9 +1908,9 @@ function resolveDefend(kind) {
       setAnim(you, "evade"); SFX.evade();
       callout("EVADED", "#8fd8ff");
     } else if (saved === "absorb") {
-      G.banked += ABSORB_STORE; SFX.absorb();
-      callout("ABSORBED +" + ABSORB_STORE, "#8fd8ff");
-      floatDmg("+" + ABSORB_STORE + " BANKED", "#8fd8ff", "you");
+      G.bankPct = o.val; SFX.absorb();
+      callout("ABSORBED +" + o.val + "%", "#8fd8ff");
+      floatDmg("+" + o.val + "% BANKED", "#8fd8ff", "you");
     } else {
       setAnim(you, "hurt"); burst(-.5, 1.78, 0, C.redstone); shake(1.3); SFX.counter();
       loseHeart(); addCharge(CHARGE.taken);
@@ -1805,7 +1959,7 @@ function resolveSpecialHit(kind) {
   }
   if (!(A.execute && G.spAll)) {
     var g = equipped("gloves");
-    if (g && g.stat === "power") total = Math.round(total * g.val);
+    if (g && g.stat === "power" && allyAllows("gloves", g)) total = Math.round(total * g.val);
     if (G.banked > 0) { total += Math.round(G.banked * (G.spAll ? ABSORB_WHITE : 1)); G.banked = 0; }
   } else { G.banked = 0; }
   G.special = 0; renderSpecial();
@@ -1816,6 +1970,15 @@ function resolveSpecialHit(kind) {
     shake(2.2); SFX.special();
     dealToFoe(total, "#ffc244", (A.execute && G.spAll) ? " FINISH" : (G.spAll && !A.execute ? " x" + SPECIAL_ALL_WHITE : ""));
     callout((A.execute && G.spAll) ? "EXECUTED" : (G.spAll && !A.execute ? "FLAWLESS SPECIAL x" + SPECIAL_ALL_WHITE : "SPECIAL SLAM"), "#ffc244");
+    if (A.curse && G.foeHP > 0) {              /* the house deals one off the bottom */
+      setTimeout(function () {
+        var c = pick(["confuse", "burn", "chill"]);
+        if (c === "confuse") { G.confuse = 1; callout("CONFUSED", "#c39bff"); }
+        else if (c === "burn") { G.burn = BURN_TURNS; callout("BURNING", "#ff9a3c"); }
+        else { G.chill = CHILL_SPINS; callout("CHILLED", "#8fd8ff"); }
+        renderFoeHP();
+      }, 700);
+    }
     if (A.risk && G.spMissed) {                /* only a whiff pays the house */
       setTimeout(function () {
         if (A.dodge && Math.random() < A.dodge) {
@@ -1878,7 +2041,7 @@ function finish(won) {
     earned = Math.round((6 + G.lvl * 3) * D.reward);
     RUN.streak = 0;
     RUN.hp = null;                             /* back to level 1, hearts restored */
-    RUN.up = { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0 };   /* training is per run */
+    RUN.up = { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0, steady: 0, clock: 0 };   /* training is per run */
     clearBoons();                              /* temporary means temporary */
   }
   RUN.coins += earned; RUN.gems += gemsWon; save();
@@ -1941,9 +2104,12 @@ function tick(dt) {
    CHESTS
 ============================================================ */
 var CHESTS = [
-  { k: "normal", name: "NORMAL CHEST", cur: "coins", cost: 150,
+  { k: "normal", name: "NORMAL CHEST", cur: "coins", cost: 1500,
     odds: "70% common - 10% rare - 5% epic - 1% legendary - 14% gold",
     table: [["common", 70], ["rare", 10], ["epic", 5], ["legendary", 1], ["gold", 14]] },
+  { k: "ad", name: "AD CHEST", cur: "ad", cost: 0, daily: true,
+    odds: "50% common - 35% rare - 10% epic - 5% legendary - once a day",
+    table: [["common", 50], ["rare", 35], ["epic", 10], ["legendary", 5]] },
   { k: "great", name: "GREAT CHEST", cur: "gems", cost: 5,
     odds: "40% rare - 30% common - 20% epic - 10% legendary",
     table: [["rare", 40], ["common", 30], ["epic", 20], ["legendary", 10]] },
@@ -1962,9 +2128,27 @@ function rollTable(table) {
   return table[table.length - 1][0];
 }
 function openChest(ch) {
+  if (ch.cur === "ad") {                       /* paid for with an ad, once a day */
+    if (!adChestReady()) { SFX.nope(); return; }
+    var btnBusy = false;
+    var grant = function (ok) {
+      if (btnBusy) return; btnBusy = true;
+      if (!ok) { SFX.nope(); return; }
+      RUN.adDay = today(); save();
+      rollChest(ch);
+    };
+    if (window.Ads && window.Ads.showRewarded) {
+      window.Ads.showRewarded().then(grant).catch(function () { grant(false); });
+      setTimeout(function () { grant(false); }, 190000);
+    } else setTimeout(function () { grant(true); }, 500);
+    return;
+  }
   var have = ch.cur === "coins" ? RUN.coins : RUN.gems;
   if (have < ch.cost) { SFX.nope(); return; }
   if (ch.cur === "coins") RUN.coins -= ch.cost; else RUN.gems -= ch.cost;
+  rollChest(ch);
+}
+function rollChest(ch) {
   var result = rollTable(ch.table);
   var res;
   if (result === "gold") {
@@ -1972,8 +2156,8 @@ function openChest(ch) {
     RUN.coins += bonus;
     res = { gold: bonus };
   } else {
-    var kind = Math.random() < 0.5 ? "outfit" : "gloves";
-    var type = pick(kind === "outfit" ? OUTFITS : GLOVES).t;
+    var kind = pick(["outfit", "gloves", "boots"]);
+    var type = pick(kind === "outfit" ? OUTFITS : (kind === "boots" ? BOOTS : GLOVES)).t;
     var item = makeItem(kind, type, result, false);
     /* find the best copy already owned of this exact item and tier */
     var bestIdx = -1, best = null;
@@ -2154,10 +2338,12 @@ UPGRADES.forEach(function (u) {
   row.querySelector("button").addEventListener("click", function () {
     var lv = RUN.up[u.k];
     if (lv >= u.max) return;
-    var cost = u.costs[lv], gems = u.cur === "gems";
+    var cost = u.costs[lv], gems = u.cur === "gems", gold = u.gold || 0;
     if (u.k === "mastery" && !allyBase().mastery) { SFX.nope(); return; }
-    if ((gems ? RUN.gems : RUN.coins) < cost) { SFX.nope(); return; }
+    if (u.minLvl && foeLevel() < u.minLvl) { SFX.nope(); return; }
+    if ((gems ? RUN.gems : RUN.coins) < cost || RUN.coins < gold) { SFX.nope(); return; }
     if (gems) RUN.gems -= cost; else RUN.coins -= cost;
+    if (gold) RUN.coins -= gold;
     RUN.up[u.k] = lv + 1;
     _adKey = "";                         /* the kit just changed - drop the cache */
     if (u.k === "hearts" && RUN.hp !== null) RUN.hp = Math.min(youMaxHP(), RUN.hp + 1);
@@ -2178,6 +2364,7 @@ CHESTS.forEach(function (ch) {
 
 function gearSlotHTML(kind) {
   var it = equipped(kind);
+  if (it && !allyAllows(kind, it)) it = null;
   var box = document.createElement("div"); box.className = "gear-slot";
   var k = document.createElement("div"); k.className = "gs-kind"; k.textContent = kind.toUpperCase();
   var n = document.createElement("div"); n.className = "gs-name";
@@ -2217,24 +2404,37 @@ function renderPit() {
     btn.innerHTML = "";
     if (lv >= u.max) { btn.textContent = "MAX"; btn.disabled = true; }
     else {
-      var cost = u.costs[lv], gems = u.cur === "gems";
-      var blocked = u.k === "mastery" && !allyBase().mastery;
-      btn.disabled = blocked || (gems ? RUN.gems : RUN.coins) < cost;
+      var cost = u.costs[lv], gems = u.cur === "gems", gold = u.gold || 0;
+      var blocked = (u.k === "mastery" && !allyBase().mastery) ||
+                    (u.minLvl && foeLevel() < u.minLvl);
+      btn.disabled = blocked || (gems ? RUN.gems : RUN.coins) < cost || RUN.coins < gold;
       btn.appendChild(gems ? gemIcon() : coinIcon());
       btn.appendChild(document.createTextNode(cost));
+      if (gold) {                       /* mastery is paid in both */
+        btn.appendChild(document.createTextNode(" "));
+        btn.appendChild(coinIcon());
+        btn.appendChild(document.createTextNode(gold));
+      }
     }
   });
   Array.prototype.forEach.call(chestsEl.children, function (b) {
-    var ch = b._ch, have = ch.cur === "coins" ? RUN.coins : RUN.gems;
-    b.disabled = have < ch.cost;
-    var cc = b.querySelector(".cc");
+    var ch = b._ch, cc = b.querySelector(".cc");
     cc.innerHTML = "";
-    cc.appendChild(ch.cur === "coins" ? coinIcon() : gemIcon());
-    cc.appendChild(document.createTextNode(ch.cost));
+    if (ch.cur === "ad") {
+      var ready = adChestReady();
+      b.disabled = !ready;
+      cc.appendChild(document.createTextNode(ready ? "WATCH AD" : "COME BACK TOMORROW"));
+    } else {
+      var have = ch.cur === "coins" ? RUN.coins : RUN.gems;
+      b.disabled = have < ch.cost;
+      cc.appendChild(ch.cur === "coins" ? coinIcon() : gemIcon());
+      cc.appendChild(document.createTextNode(ch.cost));
+    }
   });
   var strip = $("gear-strip"); strip.innerHTML = "";
   strip.appendChild(gearSlotHTML("outfit"));
   strip.appendChild(gearSlotHTML("gloves"));
+  strip.appendChild(gearSlotHTML("boots"));
 
   var lvl = foeLevel(), d = foeFor(lvl), boss = isBoss(lvl);
   $("next-foe").className = "next-foe" + (boss ? " boss" : "");
@@ -2325,7 +2525,7 @@ function renderGallery() {
     g2.appendChild(galCard(a.name, a.tag, [
       a.desc,
       a.hits + " spins - finisher x" + a.mult.toFixed(2) +
-      "   slam x" + (a.atk || 1).toFixed(2) + "   counter x" + (a.cnt || 1).toFixed(2) +
+      "   slam x" + (a.atk === 0 ? 0 : (a.atk || 1)).toFixed(2) + "   counter x" + (a.cnt === 0 ? 0 : (a.cnt || 1)).toFixed(2) +
       "   charge x" + a.charge.toFixed(2) + "   glove procs x" + a.procMul
     ]));
   });
@@ -2352,6 +2552,9 @@ function renderGallery() {
 
 /* ---------- settings ---------- */
 var OPTIONS = [
+  { k: "perf", name: "PERFORMANCE MODE", invert: true,
+    on: "Shadows off and a lower render resolution. Turn this on if the game stutters.",
+    off: "Full quality - shadows and full resolution." },
   { k: "music", name: "MUSIC",
     on: "The pit theme plays under the fight.",
     off: "No theme. Sound effects are unaffected." },
@@ -2365,7 +2568,8 @@ var OPTIONS = [
 function renderSettings() {
   var grid = $("set-grid"); grid.innerHTML = "";
   OPTIONS.forEach(function (o) {
-    var on = RUN[o.k] !== false;
+    /* most options are "on by default"; PERFORMANCE MODE is off by default */
+    var on = o.invert ? RUN[o.k] === true : RUN[o.k] !== false;
     var card = document.createElement("div"); card.className = "item ally" + (on ? " eq" : "");
     var chip = document.createElement("span"); chip.className = "tier-chip";
     chip.style.background = on ? "#ffc244" : "#5b5266";
@@ -2377,6 +2581,7 @@ function renderSettings() {
     b.addEventListener("click", function () {
       RUN[o.k] = !on;
       if (o.k === "sfx" && !on) SFX.buy();          /* only audible turning it back on */
+      if (o.k === "perf") applyPerf();
       save(); MUSIC.sync(); renderSettings();
     });
     card.appendChild(b); grid.appendChild(card);
@@ -2395,7 +2600,7 @@ function renderAllies() {
     var ef = document.createElement("div"); ef.className = "it-eff"; ef.textContent = a.desc; card.appendChild(ef);
     var kit = document.createElement("div"); kit.className = "ally-kit";
     kit.textContent = a.hits + " SLAMS - x" + a.mult.toFixed(2) + " SPECIAL\n" +
-                      "SLAM x" + (a.atk || 1).toFixed(2) + " - COUNTER x" + (a.cnt || 1).toFixed(2) + "\n" +
+                      "SLAM x" + (a.atk === 0 ? 0 : (a.atk || 1)).toFixed(2) + " - COUNTER x" + (a.cnt === 0 ? 0 : (a.cnt || 1)).toFixed(2) + "\n" +
                       "CHARGE x" + a.charge.toFixed(2) + " - PROC x" + a.procMul;
     kit.style.whiteSpace = "pre-line";
     card.appendChild(kit);
@@ -2406,7 +2611,12 @@ function renderAllies() {
     b.disabled = locked;
     b.addEventListener("click", function () {
       if (RUN.streak > 0) { SFX.nope(); return; }
-      RUN.ally = a.k; _adKey = ""; SFX.buy(); save(); applyOutfitLook(); renderAllies();
+      RUN.ally = a.k; _adKey = "";
+      ["outfit", "gloves", "boots"].forEach(function (k) {   /* shed what he will not wear */
+        var it = equipped(k);
+        if (it && !allyAllows(k, it)) RUN.equip[k] = null;
+      });
+      SFX.buy(); save(); applyOutfitLook(); renderAllies();
     });
     card.appendChild(b); grid.appendChild(card);
   });
@@ -2459,9 +2669,19 @@ function renderWardrobe() {
     chip.style.background = meta.color; chip.textContent = meta.name; card.appendChild(chip);
     var nm = document.createElement("div"); nm.className = "it-name"; nm.textContent = itemName(it); card.appendChild(nm);
     var ef = document.createElement("div"); ef.className = "it-eff"; ef.textContent = itemEff(it); card.appendChild(ef);
-    var b = document.createElement("button"); b.className = "it-btn" + (on ? " on" : ""); b.type = "button";
-    b.textContent = on ? "EQUIPPED" : "EQUIP";
+    var allowed = allyAllows(it.kind, it);
+    if (!allowed) {
+      var why = document.createElement("div"); why.className = "it-eff";
+      why.style.color = "#8d8397";
+      why.textContent = allyBase().name + " will not wear this.";
+      card.appendChild(why);
+    }
+    var b = document.createElement("button");
+    b.className = "it-btn" + (on && allowed ? " on" : ""); b.type = "button";
+    b.disabled = !allowed;
+    b.textContent = !allowed ? "LOCKED" : (on ? "EQUIPPED" : "EQUIP");
     b.addEventListener("click", function () {
+      if (!allyAllows(it.kind, it)) { SFX.nope(); return; }
       RUN.equip[it.kind] = it.uid; SFX.buy(); save();
       applyOutfitLook();          /* gloves change the model now, not just outfits */
       renderWardrobe();
@@ -2491,7 +2711,9 @@ document.addEventListener("visibilitychange", function () {
     for (var i = debris.length - 1; i >= 0; i--) {   /* drop anything left mid-flight */
       var d = debris[i];
       if (!d.userData.mote) continue;
-      scene.remove(d); d.geometry.dispose(); d.material.dispose(); debris.splice(i, 1);
+      scene.remove(d);
+      if (!d.userData.shared) { d.geometry.dispose(); d.material.dispose(); }
+      debris.splice(i, 1);
     }
     auraT = 0;
     MUSIC.sync();
@@ -2610,8 +2832,8 @@ $("survey-btn").addEventListener("click", function () {
 });
 
 $("reset-btn").addEventListener("click", function () {
-  RUN.coins = 0; RUN.gems = 0; RUN.streak = 0; RUN.diff = 1;
-  RUN.up = { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0 };
+  RUN.coins = 0; RUN.gems = 0; RUN.streak = 0; RUN.diff = 0;
+  RUN.up = { hearts: 0, grip: 0, power: 0, focus: 0, mastery: 0, steady: 0, clock: 0 };
   RUN.ally = "kazuma";
   RUN.hp = null;
   clearBoons();
